@@ -1,0 +1,45 @@
+.hidden {
+    display: none !important;
+}
+
+#loader-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    width: 100vw;
+    position: fixed;
+    top: 0;
+    left: 0;
+    background-color: var(--color-fondo);
+}
+
+
+/* HTML: <div class="loader"></div> */
+.loader {
+    font-size: 120px; 
+    width: 1em; 
+    aspect-ratio: 1;
+    display: grid;
+    color: #C0C0C0;
+    background: radial-gradient(farthest-side, currentColor calc(100% - 0.12em), #0000 calc(100% - 0.10em) 0);
+    -webkit-mask: radial-gradient(farthest-side, #0000 calc(100% - 0.26em),#000 calc(100% - 0.24em));
+    border-radius: 50%;
+    animation: l19 2s infinite linear;
+}
+.loader::before,
+
+.loader::after {    
+    content: "";
+    grid-area: 1/1;
+    background:
+    linear-gradient(currentColor 0 0) center,
+    linear-gradient(currentColor 0 0) center;
+    background-size: 100% 0.2em, 0.2em 100%;
+    background-repeat: no-repeat;
+}
+
+.loader::after { transform: rotate(45deg); }
+
+@keyframes l19 { 100%{transform: rotate(1turn)} }
+

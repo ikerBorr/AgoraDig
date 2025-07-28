@@ -1,0 +1,71 @@
+/* Color palette */
+:root {
+  --tono-primario: 210;
+  --saturacion-primaria: 70%;
+  
+  --tono-neutro: 210;
+  --saturacion-neutra: 10%;
+
+  /* Day mode */
+  --color-fondo:        hsl(var(--tono-neutro), var(--saturacion-neutra), 95%);
+  --color-texto:        hsl(var(--tono-neutro), var(--saturacion-neutra), 15%);
+  --color-enlace:       hsl(var(--tono-primario), var(--saturacion-primaria), 45%);
+  --color-boton-fondo:  hsl(var(--tono-neutro), var(--saturacion-neutra), 100%);
+  --color-boton-texto:  hsl(var(--tono-neutro), var(--saturacion-neutra), 15%);
+}
+
+/* Night mode */
+body.night-mode {
+  --color-fondo:        hsl(var(--tono-neutro), var(--saturacion-neutra), 10%);
+  --color-texto:        hsl(var(--tono-neutro), var(--saturacion-neutra), 90%);
+  --color-enlace:       hsl(var(--tono-primario), var(--saturacion-primaria), 65%);
+  --color-boton-fondo:  hsl(var(--tono-neutro), var(--saturacion-neutra), 20%);
+  --color-boton-texto:  hsl(var(--tono-neutro), var(--saturacion-neutra), 90%);
+}
+
+body {
+    background-color: var(--color-fondo);
+    color: var(--color-texto);
+    transition: background-color 0.3s, color 0.3s;
+    padding: 20px;
+}
+
+h1, h2, h3, h4, h5, h6 { color: var(--color-texto); }
+
+a { color: var(--color-enlace);}
+
+button {
+    padding: 10px 15px;
+    background-color: var(--color-boton-fondo);
+    border: 1px solid var(--color-enlace);
+    color: var(--color-boton-texto);
+    font-size: 1em;
+}
+
+small { color: var(--color-texto-secundario); }
+
+/* Icons Sun and Moon */
+#theme-toggle {
+    margin-left: auto;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 5px;
+}
+
+#theme-toggle svg {
+    width: 36px;
+    height: 36px;
+    stroke: var(--color-texto); 
+}
+
+.icon-moon {
+    display: none;
+}
+
+body.night-mode .icon-moon {
+    display: inline-block;
+}
+body.night-mode .icon-sun {
+    display: none;
+}

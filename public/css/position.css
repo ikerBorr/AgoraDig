@@ -1,0 +1,50 @@
+/* --- Utilities for text-align --- */
+.text-center {
+    text-align: center;
+}
+
+.text-right {
+    text-align: right;
+}
+
+.text-left {
+    text-align: left;
+}
+
+
+/* --- Utilities for flexbox --- */
+.flex-container {
+    display: flex;
+}
+
+.justify-center {
+    justify-content: center; /* Centra horizontalmente */
+}
+
+.justify-right {
+    justify-content: flex-end; /* Alinea a la derecha */
+}
+
+.justify-left {
+    justify-content: flex-start; /* Alinea a la izquierda (comportamiento por defecto) */
+}
+
+/* --- Utilities for align-items --- */
+.align-middle {
+    align-items: center; /* Centra verticalmente */
+}
+
+.align-up {
+    align-items: flex-start; /* Alinea arriba */
+}
+
+.align-down {
+    align-items: flex-end; /* Alinea abajo */
+}
+
+/* --- Utilities for center-perfect --- */
+.center-perfect {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}

@@ -1,0 +1,76 @@
+<section id="register" class=" form text-center align-middle">
+    <h1>Crear una cuenta</h1>
+    <form id="registerForm">
+        <div class="input-group">
+            <input type="text" name="firstName" placeholder="Nombre" required>
+            <div class="error-message"></div> </div>
+        <div class="input-group">
+            <input type="text" name="lastName" placeholder="Apellidos" required>
+            <div class="error-message"></div> </div>
+
+        <div class="input-group">
+            <input type="text" name="username" placeholder="Nombre de usuario" required>
+            <div class="error-message"></div>
+        </div>
+        
+        <div class="input-group">
+            <input type="email" name="email" placeholder="Email" required>
+            <div class="error-message"></div>
+        </div>
+        <div class="input-group">
+            <input type="email" name="confirmEmail" placeholder="Confirmar Email" required>
+            <div class="error-message"></div>
+        </div>
+
+        <div class="input-group">
+            <input type="password" name="password" placeholder="Contraseña" required>
+            <div class="error-message"></div>
+        </div>
+        <div class="input-group">
+            <input type="password" name="confirmPassword" placeholder="Confirmar Contraseña" required>
+            <div class="error-message"></div>
+        </div>
+        
+        <div class="input-group">
+            <input type="date" name="dateOfBirth" required>
+            <div class="error-message"></div>
+        </div>
+
+        <div id="message"></div>
+
+        <div class="input-group">
+            <label for="profilePicture">Foto de perfil:</label>
+            <br>
+            <input type="file" name="profilePicture" accept="image/png, image/jpeg" required>
+            <br>
+            <small>(Tamaño máximo: 2MB)</small>
+            <div class="error-message"></div>
+        </div>
+        <br>
+        <button type="submit">Registrar</button>
+        
+        
+        <div class="form-group terms-group">
+            <input type="checkbox" id="publicity" name="acceptPublicity">
+            <label for="publicity">
+                Acepto recibir correos con novedades, promociones e información.
+            </label>
+        </div>
+        <div class="form-group terms-group">
+            <input type="checkbox" id="terms" name="acceptTermsandConditions" required>
+            <label for="terms">
+                He leído y acepto los 
+                <a href="/terms-and-conditions" target="_blank" rel="noopener noreferrer">Términos y Condiciones</a> 
+                y la 
+                <a href="/privacy-policy" target="_blank" rel="noopener noreferrer">Política de Privacidad</a>.
+            </label>
+        </div>
+    </form>
+
+        <p> 
+            <br>
+            ¿Ya tienes cuenta? <br>
+            <a href="/login">Iniciar Sesión</a>
+        </p>
+
+</section>  

@@ -1,0 +1,8 @@
+footer {
+    text-align: center;
+    width: 100%;
+}
+
+.terms-link, .privacy-link {
+    font-size: clamp(8px, 0.85rem, 12px);
+}
