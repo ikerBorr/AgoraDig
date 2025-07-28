@@ -131,7 +131,7 @@ const userSchema = new mongoose.Schema({
     // User preferences
     acceptsPublicity: {
         type: Boolean,
-        default: true
+        default: false
     },
 
     // Metadata
@@ -234,7 +234,7 @@ app.post('/register', sensitiveRouteLimiter, (req, res) => {
                 password,
                 confirmPassword,
                 dateOfBirth,
-                acceptsPublicity
+                acceptsPublicity 
             } = req.body;
 
             // --- Validations ---
@@ -291,7 +291,7 @@ app.post('/register', sensitiveRouteLimiter, (req, res) => {
             maxDate.setFullYear(maxDate.getFullYear() - 6);
             if (isNaN(birthDate.getTime()) || birthDate > maxDate || birthDate < minDate) {
                 if (tempFile) fs.unlinkSync(tempFile.path);
-                return res.status(400).json({ errors: { dateOfBirth: 'La fecha de nacimiento proporcionada no es válida.' }});
+                return res.status(400).json({ errors: { dateOfBirth: 'La fecha de nacimiento proporcionada no es válida o eres demasiado joven para registrarte.' }});
             }
 
             // Password hashing
@@ -311,7 +311,7 @@ app.post('/register', sensitiveRouteLimiter, (req, res) => {
                 password: hashedPassword,
                 recoveryPIN: hashedRecoveryPIN,
                 dateOfBirth,
-                acceptsPublicity: !!acceptsPublicity
+                acceptsPublicity
             });
             await newUser.save();
 
