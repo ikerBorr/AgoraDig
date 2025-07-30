@@ -16,18 +16,18 @@
 
 /* Night mode */
 body.night-mode {
-  --color-fondo:        hsl(var(--tono-neutro), var(--saturacion-neutra), 10%);
-  --color-texto:        hsl(var(--tono-neutro), var(--saturacion-neutra), 90%);
+  --color-fondo:        rgb(23, 25, 28);
+  --color-texto:        rgb(230, 230, 230);
   --color-enlace:       hsl(var(--tono-primario), var(--saturacion-primaria), 65%);
-  --color-boton-fondo:  hsl(var(--tono-neutro), var(--saturacion-neutra), 20%);
-  --color-boton-texto:  hsl(var(--tono-neutro), var(--saturacion-neutra), 90%);
+  --color-boton-fondo:  rgb(44, 46, 51);
+  --color-boton-texto:  rgb(230, 230, 230);
 }
+
 
 body {
     background-color: var(--color-fondo);
     color: var(--color-texto);
     transition: background-color 0.3s, color 0.3s;
-    padding: 20px;
 }
 
 h1, h2, h3, h4, h5, h6 { color: var(--color-texto); }
@@ -57,6 +57,10 @@ small { color: var(--color-texto-secundario); }
     width: 36px;
     height: 36px;
     stroke: var(--color-texto); 
+}
+
+#theme-toggle:hover svg {
+    stroke: var(--color-enlace);
 }
 
 .icon-moon {

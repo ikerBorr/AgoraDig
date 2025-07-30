@@ -17,5 +17,4 @@ nav {
 
 .nav-link:hover {
     color: var(--color-enlace);
-    background-color: rgba(128, 128, 128, 0.05);
 }
