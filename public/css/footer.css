@@ -1,8 +1,9 @@
 footer {
     text-align: center;
+    font-size: clamp(13px, 0.75rem + 0.25vw, 16px); 
     width: 100%;
 }
 
 .terms-link, .privacy-link {
-    font-size: clamp(8px, 0.85rem, 12px);
+    font-size: clamp(8px, 0.85rem, 11px);
 }

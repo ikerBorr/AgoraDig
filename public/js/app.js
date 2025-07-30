@@ -1,4 +1,5 @@
 const appRoot = document.getElementById('app-root');
+const loaderContainer = document.getElementById('loader-container');
 
 // Register and Login scripts
 async function loadAndExecuteScript(templatePath) {
@@ -53,6 +54,9 @@ async function fetchTemplate(path) {
 }
 
 async function renderPage(path) {
+    loaderContainer.classList.remove('hidden');
+    appRoot.classList.add('hidden');
+
     let templatePath = '';
     
     if (path === '/' || path === '/home') {
@@ -92,7 +96,8 @@ async function renderPage(path) {
         document.title = 'ERROR 404';
     }
 
-    appRoot.innerHTML = await fetchTemplate(templatePath);
+    const template = await fetchTemplate(templatePath);
+    appRoot.innerHTML = template;
     
     if (path === '/register-success') {
         const pin = sessionStorage.getItem('registrationPin');
@@ -105,6 +110,9 @@ async function renderPage(path) {
         }
     }
     await loadAndExecuteScript(templatePath);
+    
+    loaderContainer.classList.add('hidden'); 
+    appRoot.classList.remove('hidden'); 
 }
 
 async function handleNavClick(event) {

@@ -4,6 +4,9 @@
 /* BASE */
 @import url(./base.css);
 
+/* LAYOUT */
+@import url(./content-wrapper.css);
+
 /* UTILITIES */
 @import url(./position.css);
 
