@@ -96,8 +96,7 @@ async function renderPage(path) {
         document.title = 'ERROR 404';
     }
 
-    const template = await fetchTemplate(templatePath);
-    appRoot.innerHTML = template;
+    appRoot.innerHTML = await fetchTemplate(templatePath);
     
     if (path === '/register-success') {
         const pin = sessionStorage.getItem('registrationPin');
@@ -110,9 +109,9 @@ async function renderPage(path) {
         }
     }
     await loadAndExecuteScript(templatePath);
-    
+
     loaderContainer.classList.add('hidden'); 
-    appRoot.classList.remove('hidden'); 
+    appRoot.classList.remove('hidden');
 }
 
 async function handleNavClick(event) {
