@@ -124,6 +124,11 @@ const userSchema = new mongoose.Schema({
         select: false ,
         unique: true
     },
+    description: {
+        type: String,
+        trim: true,
+        maxlength : 300
+    },
     profilePicturePath: {
         type: String 
     },

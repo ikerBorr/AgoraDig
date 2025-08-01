@@ -83,6 +83,11 @@ async function renderPage(path) {
         templatePath = './templates/login.html';
         document.title = 'Iniciar Sesión';
     }
+    else if (path === '/profile')
+    {
+        templatePath = './templates/profile.html';
+        document.title = 'Perfil';
+    }
     else if (path === '/terms-and-conditions') {
         templatePath = './templates/terms-and-conditions.html';
         document.title = 'Términos y Condiciones';
