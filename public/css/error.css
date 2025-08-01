@@ -1,10 +1,17 @@
+/**
+ * @file error.css
+ * @description Estilos para componentes y páginas de error.
+ */
+
+/* Importa la fuente especial para los encabezados de error. */
 @import url('https://fonts.googleapis.com/css2?family=Modak&display=swap');
 
-.error{
-    font-family: 'Parastoo', serif;
+.error {
+  font-family: 'Parastoo', serif;
 }
 
-h1.error, h2.error, h3.error{
-    font-family: "Modak", system-ui;
-    font-weight: 100;
+h1.error, h2.error, h3.error {
+  font-family: "Modak", system-ui;
+  font-weight: 100;
+  line-height: 1.2;
 }

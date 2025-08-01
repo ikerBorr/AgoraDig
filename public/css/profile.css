@@ -1,1 +1,90 @@
-/* Profile Page */
+/**
+ * @file profile.css
+ * @description Estilos para la página de perfil de usuario.
+ */
+
+/* Contenedor principal de la sección de perfil de usuario */
+#user-profile {
+  /* Asegura que el contenedor ocupe un ancho razonable en la pantalla */
+  max-width: 600px;
+  width: 90%;
+  /* Añade un espacio vertical arriba y abajo del perfil */
+  margin-top: 40px;
+  margin-bottom: 40px;
+}
+
+/* Tarjeta que envuelve todo el contenido del perfil */
+.profile-card {
+  /* Espaciado interno generoso para que el contenido no toque los bordes */
+  padding: 40px;
+  /* Utiliza variables de color definidas en el tema para consistencia */
+  background-color: var(--color-boton-fondo);
+  border-radius: 12px;
+  /* Sombra sutil para dar profundidad a la tarjeta */
+  box-shadow: 0 5px 20px hsla(var(--tono-neutro), var(--saturacion-neutra), 0%, 0.1);
+  /* Borde fino que también usa los colores del tema */
+  border: 1px solid hsla(var(--tono-neutro), var(--saturacion-neutra), 50%, 0.2);
+  /* El HTML ya incluye la clase 'center-text', por lo que el texto está alineado */
+}
+
+/* Estilo para la imagen de perfil del usuario */
+.profile-picture {
+  /* --- Dimensiones y forma --- */
+  width: 150px;
+  height: 150px;
+  /* Convierte la imagen cuadrada en un círculo perfecto */
+  border-radius: 50%;
+  /* Evita que la imagen se estire o deforme si no es cuadrada */
+  object-fit: cover;  
+  
+  /* --- Centrado y borde --- */
+  /* display: block y margin: auto centran la imagen horizontalmente */
+  display: block;
+  margin: 0 auto 20px; /* Centra y añade espacio inferior */
+  /* Borde decorativo que utiliza el color de enlace del tema */
+  border: 3px solid var(--color-enlace);
+  /* Sombra de color sutil para destacar la foto */
+  box-shadow: 0 0 15px hsla(var(--tono-primario), var(--saturacion-primaria), 50%, 0.3);
+}
+
+/* Estilo para el nombre completo del usuario (h1) */
+.profile-fullname {
+  /* El h1 ya tiene estilos base, solo ajustamos el margen inferior para acercarlo al username */
+  margin-bottom: 0.25rem;
+  /* Tamaño de fuente fluido, consistente con la definición en base.css */
+  font-size: clamp(1.75rem, 1rem + 4vw, 2.441rem);
+}
+
+/* Estilo para el nombre de usuario (@usuario) */
+.profile-username {
+  /* Tamaño de fuente fluido y un color de texto más suave */
+  font-size: clamp(1.1rem, 1rem + 1vw, 1.25rem);
+  color: hsl(var(--tono-neutro), var(--saturacion-neutra), 45%);
+  /* Elimina el margen superior y añade espacio inferior */
+  margin-top: 0;
+  margin-bottom: 25px;
+}
+
+/* Párrafo con la descripción o biografía del usuario */
+.profile-description {
+  /* Mejora la legibilidad con un interlineado mayor */
+  line-height: 1.7;
+  font-size: 1.05em;
+  /* Limita el ancho para que las líneas de texto no sean demasiado largas */
+  max-width: 90%; 
+  /* Centra el bloque de texto */
+  margin-left: auto;
+  margin-right: auto;
+  margin-bottom: 30px;
+}
+
+/* Contenedor para metadatos, como la fecha de registro */
+.profile-meta {
+  /* Espaciado superior y una línea divisoria para separarlo de la descripción */
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid hsla(var(--tono-neutro), var(--saturacion-neutra), 50%, 0.2);
+  /* Texto más pequeño y de un color suave para darle una importancia secundaria */
+  font-size: 0.9em;
+  color: hsl(var(--tono-neutro), var(--saturacion-neutra), 50%);
+}

@@ -1,4 +1,10 @@
+/**
+ * @file layout.css
+ * @description Clases y estilos para la maquetación principal (layout).
+ */
+
 .content-wrapper {
+  /* Contenedor principal que centra el contenido y limita su ancho. */
   max-width: 100%;
   width: 80vw;
   margin-left: auto;
@@ -6,8 +12,19 @@
 }
 
 .content-wrapper img {
+  /* Asegura que las imágenes dentro del wrapper sean responsivas. */
   max-width: 100%;
   max-height: 55vh;
   height: auto;
   display: block;
+}
+
+.AgoraDig-logo {
+  /* Estilo para el logo principal de la aplicación. */
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  max-height: 15vh;
+  width: auto;
+  height: auto;
 }

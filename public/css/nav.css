@@ -1,19 +1,103 @@
-nav {
-    display: flex;
-    align-items: center;
-    padding: 5px 20px;
+/**
+ * @file nav.css
+ * @description Estilos para el header, la navegación principal y el menú móvil.
+ */
+
+.header-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 5px 5px;
 }
 
-.nav-link {
-    display: flex;
-    align-items: center;
-    text-decoration: none;
-    color: var(--color-texto);
-    padding: 8px 16px;
-    border-radius: 6px;
-    transition: background-color 0.2s, color 0.2s;
+nav#main-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.nav-link:hover {
-    color: var(--color-enlace);
+a.nav-link {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  color: var(--color-texto);
+  padding: 8px 16px;
+  border-radius: 6px;
+  transition: background-color 0.2s, color 0.2s;
+  gap: 8px; /* Espacio entre icono y texto */
+}
+a.nav-link:hover {
+  color: var(--color-enlace);
+  text-decoration: none;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* --- Botones del Header (Menú y Tema) --- */
+#theme-toggle, .menu-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 5px;
+  display: flex;
+  align-items: center;
+  stroke: var(--color-texto);
+}
+#theme-toggle:hover, .menu-toggle:hover {
+  stroke: var(--color-enlace);
+}
+#theme-toggle svg, .menu-toggle svg {
+  transition: stroke 0.2s;
+}
+
+/* Oculta/muestra los iconos de sol/luna */
+.icon-moon { display: none; }
+body.night-mode .icon-moon { display: inline-block; }
+body.night-mode .icon-sun { display: none; }
+
+/* --- Menú Móvil --- */
+.menu-toggle {
+  display: none; /* Oculto en escritorio */
+}
+
+@media (max-width: 768px) {
+  .menu-toggle {
+    display: block;
+    z-index: 1001;
+  }
+
+  nav#main-nav {
+    position: fixed;
+    top: 0;
+    left: -100%; /* Oculto fuera de la pantalla */
+    width: 100%;
+    max-width: 45vw;
+    height: 100vh;
+    background-color: var(--color-fondo);
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 80px 20px 20px;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.2);
+    transition: left 0.3s ease-in-out;
+    z-index: 1000;
+    gap: 15px;
+  }
+
+  nav#main-nav.is-active {
+    left: 0; /* Muestra el menú */
+  }
+
+  nav#main-nav .nav-link {
+    font-size: 1.2em;
+    width: 100%;
+  }
+
+  .header-actions {
+    margin-left: auto;
+  }
 }

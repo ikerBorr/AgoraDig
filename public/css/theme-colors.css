@@ -73,3 +73,25 @@ body.night-mode .icon-moon {
 body.night-mode .icon-sun {
     display: none;
 }
+
+
+
+/* nav */
+
+#theme-toggle, .menu-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 5px;
+    display: flex;
+    align-items: center;
+}
+
+#theme-toggle svg, .menu-toggle svg {
+    stroke: var(--color-texto);
+    transition: stroke 0.2s;
+}
+
+#theme-toggle:hover svg, .menu-toggle:hover svg {
+    stroke: var(--color-enlace);
+}

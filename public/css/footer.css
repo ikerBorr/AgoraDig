@@ -1,9 +1,13 @@
+/**
+ * @file footer.css
+ * @description Estilos para el componente de pie de página (footer).
+ */
+
 footer {
-    text-align: center;
-    font-size: clamp(13px, 0.75rem + 0.25vw, 16px); 
-    width: 100%;
+  text-align: center;
+  font-size: clamp(13px, 0.75rem + 0.25vw, 16px);
 }
 
 .terms-link, .privacy-link {
-    font-size: clamp(8px, 0.85rem, 11px);
+  font-size: clamp(8px, 0.85rem, 11px);
 }

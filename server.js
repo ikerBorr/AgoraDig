@@ -127,7 +127,8 @@ const userSchema = new mongoose.Schema({
     description: {
         type: String,
         trim: true,
-        maxlength : 300
+        maxlength : 300,
+        default: ''
     },
     profilePicturePath: {
         type: String 
@@ -145,7 +146,7 @@ const userSchema = new mongoose.Schema({
         enum: ['user', 'admin', 'moderator'],
         default: 'user'
     },
-    status: {
+    userStatus: {
         type: String,
         enum: ['active', 'verified', 'banned'],
         default: 'active'
@@ -236,12 +237,15 @@ app.post('/register', (req, res, next) => {
         const {
             firstName,
             lastName,
+            dateOfBirth,
+
             username,
             email,
             confirmEmail,
             password,
             confirmPassword,
-            dateOfBirth,
+            description,
+
             acceptsPublicity 
         } = req.body;
 
@@ -313,13 +317,16 @@ app.post('/register', (req, res, next) => {
         // Save the user
         const newUser = new User({
             firstName,
-            lastName, 
+            lastName,
+            dateOfBirth, 
+
             username,
             email,
             password: hashedPassword,
             recoveryPIN: hashedRecoveryPIN,
-            dateOfBirth,
-            acceptsPublicity: !!acceptsPublicity 
+            description,
+
+            acceptsPublicity: !!acceptsPublicity,
         });
         await newUser.save();
 
@@ -382,6 +389,30 @@ app.post('/logout', (req, res) => {
         res.clearCookie('connect.sid'); // Limpia la cookie de sesión
         res.status(200).json({ message: 'Sesión cerrada con éxito.' });
     });
+});
+
+// Route to acces a user's profile
+app.get('/api/profile', async (req, res) => {
+    if (!req.session.userId) {
+        return res.status(401).json({ message: 'No autenticado. Por favor, inicie sesión.' });
+    }
+
+    try {
+        const user = await User.findById(req.session.userId)
+            .select('firstName lastName username email description profilePicturePath role createdAt');
+
+        if (!user) {
+            req.session.destroy(); // Limpiar sesión si el usuario ya no existe
+            return res.status(404).json({ message: 'Usuario no encontrado.' });
+        }
+
+        res.status(200).json(user);
+
+    }
+    catch (error) {
+        console.error('Error al obtener el perfil del usuario:', error);
+        res.status(500).json({ message: 'Error en el servidor.' });
+    }
 });
 
 

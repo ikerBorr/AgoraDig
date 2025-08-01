@@ -1,19 +1,37 @@
+/* ==========================================================================
+   ESTILOS GENERALES Y BASE
+   ========================================================================== */
+
 main {
+  /* Hace que el contenido principal ocupe todo el espacio vertical
+     disponible, empujando el footer hacia abajo. */
   flex-grow: 1;
+
+  /*Permite que el navegador rompa palabras largas para evitar que se desborden */
+  overflow-wrap: break-word;
 }
 
 body {
+  /* Define la pila de fuentes del sistema para una apariencia nativa. */
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  /* Establece un tamaño de fuente fluido que se adapta al ancho de la ventana. */
   font-size: clamp(14px, 1rem, 18px);
   line-height: 1.6;
   
+  /* Utiliza Flexbox para crear un layout de columna que ocupe al menos
+     toda la altura de la ventana (efecto "sticky footer"). */
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+
+  /* Limita el ancho y elimina el margen por defecto. */
+  max-width: 99%;
   margin: 0;
 }
 
+/* --- Estilos de Tipografía para Encabezados --- */
 h1, h2, h3, h4, h5, h6 {
+  /* Usa una fuente con serifa para un aspecto más clásico en los títulos. */
   font-family: Georgia, "Serif", Arial, Montserrat;
   margin-top: 1.5rem;
   margin-bottom: 1rem;
@@ -21,6 +39,7 @@ h1, h2, h3, h4, h5, h6 {
   line-height: 1.2;
 }
 
+/* Tamaños de fuente fluidos para cada nivel de encabezado. */
 h1 { font-size: clamp(2rem, 1rem + 5vw, 3.052rem); }
 h2 { font-size: clamp(1.75rem, 1.2rem + 4vw, 2.441rem);}
 h3 { font-size: clamp(1.5rem, 1rem + 3vw, 1.953rem);}
@@ -40,19 +59,25 @@ small {
 
 /*==============================================*/
 
+/* --- Clases de Utilidad y Estilos de Elementos Base --- */
+
+/* Clase de utilidad para texto pequeño y fluido. */
 .text-small {  font-size: clamp(10px, 0.8rem + 0.25vw, 12px);}
 
+/* Estilo por defecto para los enlaces. */
 a { text-decoration: none;}
 
+/* Añade un subrayado al pasar el ratón por encima del enlace. */
 a:hover { text-decoration: underline;}
 
+/* Estilo base para los botones. */
 button {
   cursor: pointer;
   border-radius: 5px;
 }
 
+/* Clase de utilidad para ocultar elementos de la vista.
+   !important asegura que esta regla prevalezca sobre otras. */
 .hidden {
     display: none !important;
 }
-
-/*==============================================*/
