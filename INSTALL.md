@@ -1,27 +1,28 @@
-# Instructions to Run the Backend Server
+# Instrucciones para Ejecutar el Servidor Backend
 
-## Step 1: Install Node.js
+## Paso 1: Instalar Node.js
 
-1. **Download and install Node.js**:
-    - Visit the official [Node.js](https://nodejs.org/es/download) website and download the recommended version.
-    - Follow the web instructions to complete the installation.
+1.  **Descarga e instala Node.js**:
+    * Visita el sitio web oficial de [Node.js](https://nodejs.org/es/download) y descarga la versión recomendada.
+    * Sigue las instrucciones de la web para completar la instalación.
 
-## Step 2: Install dependencies
 
-1. Open the terminal in the project’s root directory.
+## Paso 2: Instalar dependencias
 
-2. Run the following command to install all the dependencies defined in `package.json`:
-   ```bash
-   npm install
-   ```
+1.  Abre la terminal en el directorio raíz del proyecto.
 
-## Step 3: Start the server
-
-1. Run the following command in the terminal to start the server:
-
-    ```bash 
-    node server.js
+2.  Ejecuta el siguiente comando para instalar todas las dependencias definidas en el `package.json`:
+    ```bash
+    npm install
     ```
 
 
-2. The server will be running on `http://localhost:5000`.
+## Paso 3: Iniciar el servidor
+
+1.  Ejecuta el siguiente comando en la terminal para iniciar el servidor:
+
+    ```bash
+    node server.js
+    ```
+
+2.  El servidor se estará ejecutando en `http://localhost:5000`.
