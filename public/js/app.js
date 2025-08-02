@@ -95,7 +95,7 @@ async function renderPage(path) {
     if (path === '/' || path === '/home') {
         templatePath = './templates/home.html';
         document.title = 'Inicio';
-    } else if (path === '/about-me' || path === '/about') {
+    } else if (path === '/about-AD' || path === '/about') {
         templatePath = './templates/about.html';
         document.title = 'Sobre mí';
     } else if (path === '/contact') {
