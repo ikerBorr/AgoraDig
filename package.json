@@ -1,22 +1,25 @@
 {
   "name": "agora_dig",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
+    "start": "node server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "Aplicación AgoraDig con parches de seguridad.",
   "dependencies": {
-    "bcryptjs": "^3.0.2",
+    "bcrypt": "^5.1.1",
     "connect-mongo": "^5.1.0",
-    "express": "^4.18.2",
-    "express-rate-limit": "^8.0.1",
-    "express-session": "^1.18.1",
-    "mongoose": "^8.16.4",
-    "multer": "^2.0.1",
-    "sharp": "^0.34.3"
+    "dotenv": "^17.2.1",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.3.1",
+    "express-session": "^1.18.0",
+    "helmet": "^7.1.0",
+    "mongoose": "^8.4.1",
+    "multer": "^1.4.5-lts.1",
+    "sharp": "^0.33.4"
   }
 }

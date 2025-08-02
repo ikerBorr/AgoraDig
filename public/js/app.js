@@ -11,9 +11,9 @@ const loaderContainer = document.getElementById('loader-container');
 
 /**
  * Carga y ejecuta dinámicamente el script asociado a una plantilla específica.
- * Elimina el script anterior para evitar conflictos.
- * @param {string} templatePath - La ruta de la plantilla que se ha cargado.
- * @returns {Promise<void>}
+ * Elimina el script de la vista anterior para evitar conflictos de variables o listeners.
+ * @param {string} templatePath - La ruta de la plantilla que se ha cargado (ej. './templates/register.html').
+ * @returns {Promise<void>} Una promesa que se resuelve una vez el script ha sido añadido al DOM.
  */
 async function loadAndExecuteScript(templatePath) {
     // Elimina el script de la vista anterior si existe para evitar duplicados o conflictos.
@@ -32,15 +32,15 @@ async function loadAndExecuteScript(templatePath) {
         scriptSrc = './js/profile.js';
     }
 
-    // Si no hay un script específico para esta ruta, no hace nada.
+    // Si no hay un script específico para esta vista, no se realiza ninguna acción.
     if (!scriptSrc) return;
 
     // Crea y añade el nuevo script al DOM.
     const script = document.createElement('script');
-    script.id = 'view-script'; // ID para poder encontrarlo y eliminarlo después.
+    script.id = 'view-script'; // ID para poder encontrarlo y eliminarlo en la siguiente navegación.
     script.src = scriptSrc;
     
-    // El script se ejecuta al cargarse, llamando a su función de inicialización.
+    // El script se ejecuta al cargarse. Su evento 'onload' llama a la función de inicialización correspondiente.
     script.onload = () => {
         if (templatePath.includes('register.html')) {
             // Llama a la función global para inicializar el formulario de registro.
@@ -59,7 +59,7 @@ async function loadAndExecuteScript(templatePath) {
 
 /**
  * Obtiene el contenido de un archivo de plantilla HTML desde el servidor.
- * Si no se encuentra, muestra una plantilla de error 404.
+ * Si la plantilla no se encuentra, carga y devuelve una plantilla de error 404 como fallback.
  * @param {string} path - La ruta al archivo de plantilla (.html).
  * @returns {Promise<string>} El contenido HTML de la plantilla.
  */
@@ -79,8 +79,8 @@ async function fetchTemplate(path) {
 }
 
 /**
- * Renderiza una página en el contenedor #app-root basado en la ruta URL.
- * Gestiona la visibilidad del loader, obtiene la plantilla, actualiza el DOM y el título del documento.
+ * Renderiza una página en el contenedor #app-root basado en la ruta URL del navegador.
+ * Gestiona la visibilidad del loader, obtiene la plantilla, actualiza el DOM, el título del documento y carga el script asociado.
  * @param {string} path - La ruta de la URL a renderizar (ej. '/', '/login').
  * @returns {Promise<void>}
  */
@@ -92,8 +92,6 @@ async function renderPage(path) {
     let templatePath = '';
     
     // --- Lógica de Enrutamiento ---
-    // Determina qué plantilla cargar según la ruta.
-    // Sugerencia: Esto podría refactorizarse a un objeto de configuración de rutas para mayor escalabilidad.
     if (path === '/' || path === '/home') {
         templatePath = './templates/home.html';
         document.title = 'Inicio';
@@ -113,42 +111,57 @@ async function renderPage(path) {
         templatePath = './templates/login.html';
         document.title = 'Iniciar Sesión';
     } else if (path.startsWith('/profile')) {
-        // --- Ruta especial para el perfil de usuario ---
-        // Esta ruta requiere una llamada a la API para obtener datos dinámicos.
+        // --- Lógica de renderizado para la vista de perfil (ruta dinámica y privada) ---
         try {
+            // Se solicita al servidor los datos del perfil del usuario autenticado.
             const response = await fetch('/api/profile');
             if (!response.ok) {
-                // Si el usuario no está autenticado, redirige a la página de login.
+                // Si el usuario no está autenticado (401), se le redirige a la página de login.
                 if (response.status === 401) {
                     window.history.pushState({}, '', '/login');
                     await renderPage('/login');
-                    return;
+                    return; // Detiene la ejecución para evitar más renderizados.
                 }
                 throw new Error('Error al obtener los datos del perfil.');
             }
 
             const userData = await response.json();
-            let profileHtml = await fetchTemplate('./templates/profile.html');
+            const profileHtml = await fetchTemplate('./templates/profile.html');
+            
+            // Inyecta el HTML de la plantilla en el contenedor principal antes de manipularlo.
+            appRoot.innerHTML = profileHtml;
 
-            // Formatea la fecha de creación del usuario.
+            // Formatea la fecha de creación del usuario para mostrarla en un formato legible.
             const joinDate = new Date(userData.createdAt).toLocaleDateString('es-ES', {
                 year: 'numeric',
                 month: 'long',
                 day: 'numeric'
             });
+            
+            // Se utilizan selectores de clase y 'textContent' para poblar los datos de forma segura,
+            // lo que previene vulnerabilidades de Cross-Site Scripting (XSS).
+            const profilePicture = appRoot.querySelector('.profile-picture');
+            if (profilePicture) {
+                profilePicture.src = userData.profilePicturePath || '../images/default-avatar.png';
+                profilePicture.alt = `Foto de perfil de ${userData.username}`;
+            }
+            
+            const fullName = appRoot.querySelector('.profile-fullname');
+            if (fullName) fullName.textContent = `${userData.firstName} ${userData.lastName}`;
 
-            // Reemplaza los placeholders en la plantilla con los datos del usuario.
-            profileHtml = profileHtml
-                .replace(/{{profilePicturePath}}/g, userData.profilePicturePath || '../images/default-avatar.png')
-                .replace(/{{firstName}}/g, userData.firstName)
-                .replace(/{{lastName}}/g, userData.lastName)
-                .replace(/{{username}}/g, userData.username)
-                .replace(/{{description}}/g, userData.description || 'Este usuario aún no ha añadido una descripción.')
-                .replace(/{{createdAt}}/g, joinDate);
+            const username = appRoot.querySelector('.profile-username');
+            if (username) username.textContent = `@${userData.username}`;
 
-            document.title = `${userData.username}`;
-            appRoot.innerHTML = profileHtml;
-            await loadAndExecuteScript('../templates/profile.html');
+            const description = appRoot.querySelector('.profile-description');
+            if (description) description.textContent = userData.description || 'Este usuario aún no ha añadido una descripción.';
+
+            const joinDateEl = appRoot.querySelector('.profile-meta span');
+            if (joinDateEl) joinDateEl.textContent = `Miembro desde: ${joinDate}`;
+
+            document.title = userData.username; // Actualiza el título de la página con el nombre de usuario.
+            
+            templatePath = ''; // Se limpia la ruta para que el renderizador principal no la procese de nuevo.
+            await loadAndExecuteScript('./templates/profile.html'); // Se carga el script asociado a la vista de perfil.
 
         } catch (error) {
             console.error(error);
@@ -161,18 +174,19 @@ async function renderPage(path) {
         templatePath = './templates/privacy-policy.html';
         document.title = 'Política de Privacidad';
     } else {
-        // Ruta por defecto si no coincide ninguna anterior.
+        // Ruta por defecto si no coincide ninguna de las anteriores.
         templatePath = './templates/error-404.html';
         document.title = 'ERROR 404';
     }
 
-    // Si se encontró una plantilla estática, la renderiza.
+    // Si se encontró una plantilla estática, se renderiza su contenido.
     if (templatePath) {
         appRoot.innerHTML = await fetchTemplate(templatePath);
     }
     
     // Lógica específica post-renderizado para la página de registro exitoso.
     if (path === '/register-success') {
+        // Recupera el PIN desde sessionStorage para mostrarlo al usuario.
         const pin = sessionStorage.getItem('registrationPin');
         const pinDisplayElement = document.getElementById('recovery-pin-display');
 
@@ -183,8 +197,10 @@ async function renderPage(path) {
         }
     }
 
-    // Carga el script asociado a la vista, si existe.
-    await loadAndExecuteScript(templatePath);
+    // Carga el script asociado a la vista estática, si se definió una ruta de plantilla.
+    if(templatePath) {
+        await loadAndExecuteScript(templatePath);
+    }
 
     // Oculta el loader y muestra el contenido ya renderizado.
     loaderContainer.classList.add('hidden'); 
@@ -192,31 +208,32 @@ async function renderPage(path) {
 }
 
 /**
- * Manejador de eventos para los clics de navegación.
- * Intercepta los clics en enlaces, previene la recarga de la página y
- * utiliza la API de History para una navegación fluida.
- * @param {MouseEvent} event - El objeto de evento de clic.
+ * Manejador centralizado para los eventos de clic de navegación.
+ * Intercepta los clics en enlaces `<a>` para evitar la recarga completa de la página.
+ * @param {MouseEvent} event - El objeto del evento de clic.
  */
 async function handleNavClick(event) {
+    // Busca el enlace `<a>` más cercano al elemento clickeado.
     const targetLink = event.target.closest('a');
     
-    // Actúa solo si se hizo clic en un enlace y no es un enlace externo.
+    // Procesa el clic solo si es un enlace de navegación interna (sin target="_blank").
     if (targetLink && !targetLink.target) {
-        event.preventDefault(); // Previene la navegación tradicional.
+        event.preventDefault(); // Previene la navegación por defecto del navegador.
         const path = targetLink.getAttribute('href');
         
-        // Evita recargar la misma página.
+        // Actualiza el estado del historial del navegador y renderiza la nueva página solo si la ruta es diferente.
         if (window.location.pathname !== path) {
-            window.history.pushState({}, '', path); // Actualiza la URL en la barra de direcciones.
-            await renderPage(path); // Renderiza la nueva página.
+            window.history.pushState({}, '', path); 
+            await renderPage(path); 
         }
     }
 }
 
 // --- Inicialización de Event Listeners ---
-// Escucha clics en todo el documento para la navegación.
+
+// Listener para la navegación dentro de la SPA.
 document.addEventListener('click', handleNavClick);
-// Escucha los eventos de navegación del navegador (botones atrás/adelante).
+// Listener para los botones de "atrás" y "adelante" del navegador.
 window.addEventListener('popstate', () => { renderPage(window.location.pathname); });
-// Renderiza la página inicial cuando el DOM está completamente cargado.
+// Listener para la carga inicial de la página.
 document.addEventListener('DOMContentLoaded', () => { renderPage(window.location.pathname); });

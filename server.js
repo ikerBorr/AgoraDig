@@ -16,14 +16,16 @@ const fs = require('fs');
 const crypto = require('crypto');
 
 // Módulos de NPM (dependencias de terceros)
+require('dotenv').config(); // Carga las variables de entorno desde un archivo .env al objeto process.env.
 const express = require('express');
 const mongoose = require('mongoose');
 const session = require('express-session');
-const MongoStore = require('connect-mongo'); // Almacenamiento de sesiones en MongoDB
-const bcrypt = require('bcryptjs');         // Para el hashing de contraseñas
-const multer = require('multer');           // Middleware para la subida de archivos (multipart/form-data)
-const sharp = require('sharp');             // Para el procesamiento y optimización de imágenes
-const rateLimit = require('express-rate-limit'); // Para limitar la tasa de peticiones (seguridad)
+const MongoStore = require('connect-mongo'); // Almacenamiento de sesiones en MongoDB.
+const bcrypt = require('bcrypt');         // Librería optimizada para el hasheo de contraseñas.
+const multer = require('multer');           // Middleware para la subida de archivos (multipart/form-data).
+const sharp = require('sharp');             // Librería para el procesamiento y optimización de imágenes.
+const rateLimit = require('express-rate-limit'); // Middleware para limitar la tasa de peticiones y prevenir ataques.
+const helmet = require('helmet'); // Middleware que establece varias cabeceras HTTP de seguridad.
 
 
 // =================================================================
@@ -32,7 +34,14 @@ const rateLimit = require('express-rate-limit'); // Para limitar la tasa de peti
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Configuración de confianza del proxy. Necesario si la app corre detrás de un proxy inverso (Heroku, Nginx).
+// Valida que las variables de entorno críticas, como el secreto de sesión, estén presentes.
+if (!process.env.SESSION_SECRET) {
+    console.error('FATAL ERROR: La variable de entorno SESSION_SECRET no está definida.');
+    process.exit(1); // Detiene la aplicación si el secreto no está configurado para evitar vulnerabilidades.
+}
+
+// Configuración de confianza del proxy. Necesario si la app corre detrás de un proxy inverso (Heroku, Nginx, etc.).
+// Permite que express-session y express-rate-limit funcionen correctamente.
 app.set('trust proxy', 1);
 
 
@@ -40,7 +49,10 @@ app.set('trust proxy', 1);
 //  MIDDLEWARE
 // =================================================================
 
-// Middleware para parsear el cuerpo de las peticiones JSON.
+// Aplica el middleware Helmet para establecer cabeceras HTTP seguras por defecto (ej. X-XSS-Protection, Strict-Transport-Security).
+app.use(helmet());
+
+// Middleware para parsear el cuerpo de las peticiones con formato JSON.
 app.use(express.json());
 // Middleware para servir archivos estáticos (imágenes de perfil subidas).
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -48,13 +60,15 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Configuración de la sesión de usuario
 const mongoUrl = 'mongodb://localhost:27017/AgoraDig_BD';
 app.use(session({
-    secret: 'un_secreto_muy_fuerte_y_largo', // Clave secreta para firmar la cookie de sesión. Debería estar en una variable de entorno.
+    secret: process.env.SESSION_SECRET,      // Secreto utilizado para firmar la cookie de sesión, cargado desde variables de entorno.
     resave: false,                           // No volver a guardar la sesión si no ha cambiado.
     saveUninitialized: false,                // No crear sesión hasta que algo se almacene.
     store: MongoStore.create({ mongoUrl: mongoUrl }), // Almacenar las sesiones en la base de datos MongoDB.
     cookie: { 
         maxAge: 1000 * 60 * 60 * 24 * 7,     // Duración de la cookie: 7 días.
-        secure: process.env.NODE_ENV === 'production' // Usar cookies seguras (HTTPS) en producción.
+        secure: process.env.NODE_ENV === 'production', // Asegura que la cookie solo se envíe sobre HTTPS en producción.
+        httpOnly: true,                      // Previene que la cookie sea accesible desde el JavaScript del cliente (mitiga ataques XSS).
+        sameSite: 'lax'                      // Mitiga ataques de falsificación de petición en sitios cruzados (CSRF).
     }
 }));
 
@@ -87,7 +101,7 @@ const sensitiveRouteLimiter = rateLimit({
     message: 'Demasiadas peticiones a esta ruta, por favor intente de nuevo más tarde.'
 });
 
-// Aplicar el limitador global a todas las peticiones.
+// Aplicar el limitador global a todas las peticiones entrantes.
 app.use(DoSLimiter);
 
 
@@ -116,7 +130,7 @@ const userSchema = new mongoose.Schema({
     // Credenciales y datos de la cuenta
     username: { type: String, required: true, unique: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    password: { type: String, required: true, select: false },
+    password: { type: String, required: true, select: false }, // `select: false` evita que se devuelva por defecto en las consultas.
     recoveryPIN: { type: String, required: true, select: false, unique: true },
     
     // Información del perfil público
@@ -177,7 +191,7 @@ app.post('/login', sensitiveRouteLimiter, async (req, res) => {
             return res.status(400).json({ errors });
         }
 
-        // Buscar usuario por nombre de usuario o email, incluyendo la contraseña en el resultado.
+        // Buscar usuario por nombre de usuario o email, incluyendo la contraseña explícitamente en el resultado.
         const user = await User.findOne({
             $or: [{ username: loginIdentifier }, { email: loginIdentifier.toLowerCase() }]
         }).select('+password');
@@ -209,7 +223,7 @@ app.post('/login', sensitiveRouteLimiter, async (req, res) => {
  * @access  Public
  * @param   {object} req.body - Datos del formulario de registro (firstName, lastName, etc.).
  * @param   {file}   req.file - Archivo de imagen de perfil subido.
- * @returns {object} 201 - Mensaje de éxito, ID del nuevo usuario y su PIN de recuperación.
+ * @returns {object} 201 - Mensaje de éxito, ID del nuevo usuario y su PIN de recuperación en texto plano.
  * @returns {object} 400 - Errores de validación o campos faltantes.
  * @returns {object} 409 - Conflicto, el email o usuario ya existen.
  * @returns {object} 413 - El archivo subido es demasiado grande.
@@ -246,7 +260,6 @@ app.post('/register',
         } = req.body;
 
         // --- Validaciones de campos ---
-        // La gestión de errores aquí podría mejorarse para evitar la repetición de `fs.unlinkSync`.
         if (!firstName || !lastName || !username || !email || !password || !confirmPassword || !dateOfBirth || !tempFile) {
             if (tempFile) fs.unlinkSync(tempFile.path); // Eliminar archivo temporal si la validación falla.
             return res.status(400).json({ errors: { general: 'Faltan campos por rellenar.' } });
@@ -288,7 +301,7 @@ app.post('/register',
 
         const birthDate = new Date(dateOfBirth);
         const minDate = new Date(); minDate.setHours(0,0,0,0); minDate.setFullYear(minDate.getFullYear() - 110);
-        const maxDate = new Date(); maxDate.setHours(0,0,0,0); maxDate.setFullYear(maxDate.getFullYear() - 6);
+        const maxDate = new Date(); maxDate.setHours(0,0,0,0); maxDate.setFullYear(maxDate.getFullYear() - 10);
         if (isNaN(birthDate.getTime()) || birthDate > maxDate || birthDate < minDate) {
             if (tempFile) fs.unlinkSync(tempFile.path);
             return res.status(400).json({ errors: { dateOfBirth: 'La fecha de nacimiento proporcionada no es válida o eres demasiado joven para registrarte.' }});
@@ -296,8 +309,8 @@ app.post('/register',
         
         // --- Procesamiento de datos y creación de usuario ---
 
-        // Generar "salt" y hashear la contraseña para almacenamiento seguro.
-        const salt = await bcrypt.genSalt(10);
+        // Generar "salt" y hashear la contraseña. Un costo de 12 es un buen balance entre seguridad y rendimiento.
+        const salt = await bcrypt.genSalt(12); 
         const hashedPassword = await bcrypt.hash(password, salt);
         
         // Generar un PIN de recuperación único y hashearlo.
@@ -324,22 +337,27 @@ app.post('/register',
             .webp({ quality: 80 })
             .toFile(newPath);
 
-        fs.unlinkSync(tempFile.path); // Eliminar el archivo temporal original subido por multer.
+        // Eliminar el archivo temporal original subido por multer.
+        fs.unlinkSync(tempFile.path);
 
         // Actualizar el documento del usuario con la ruta de la imagen de perfil.
         newUser.profilePicturePath = `uploads/${newFileName}`;
         await newUser.save();
 
-        // Enviar respuesta exitosa con el PIN de recuperación en texto plano.
         res.status(201).json({
-            message: '¡Usuario registrado con éxito!  IMPORTANTE: Este es su PIN de recuperación. Anótelo en un lugar seguro para poder recuperar su cuenta en caso de pérdida.',
+            message: '¡Usuario registrado con éxito! Se ha generado un PIN de recuperación único. Anótelo en un lugar seguro para poder recuperar su cuenta en caso de pérdida.',
             userId: newUser._id,
+            // Se devuelve el PIN en texto plano UNA ÚNICA VEZ para que el cliente lo muestre al usuario.
+            // El frontend debe encargarse de que el usuario lo guarde y luego descartarlo.
             recoveryPIN: plainTextRecoveryPIN 
         });
 
     } catch (error) {
-        // Asegurarse de que el archivo temporal se elimine en caso de cualquier error.
-        if (tempFile) fs.unlinkSync(tempFile.path);
+        // Asegurarse de que el archivo temporal se elimine en caso de cualquier error en el proceso.
+        // Se comprueba si el archivo aún existe antes de intentar borrarlo para evitar errores.
+        if (tempFile && fs.existsSync(tempFile.path)) {
+            fs.unlinkSync(tempFile.path);
+        }
 
         // --- Manejo de errores específicos ---
         if (error.name === 'ValidationError') {
@@ -423,7 +441,7 @@ app.get('/api/profile', async (req, res) => {
 
 /**
  * @description Ruta "catch-all" o comodín. Redirige cualquier petición GET no reconocida
- * a la página principal del frontend (index.html). Esencial para Single Page Applications (SPAs).
+ * a la página principal del frontend (index.html). Esencial para el funcionamiento de Single Page Applications (SPAs).
  */
 app.get('*', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
 
