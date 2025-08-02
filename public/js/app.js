@@ -28,6 +28,8 @@ async function loadAndExecuteScript(templatePath) {
         scriptSrc = './js/register.js';
     } else if (templatePath.includes('login.html')) {
         scriptSrc = './js/login.js';
+    } else if (templatePath.includes('profile.html')) {
+        scriptSrc = './js/profile.js';
     }
 
     // Si no hay un script específico para esta ruta, no hace nada.
@@ -46,6 +48,9 @@ async function loadAndExecuteScript(templatePath) {
         } else if (templatePath.includes('login.html')) {
             // Llama a la función global para inicializar el formulario de login.
             if (typeof initLoginForm === 'function') initLoginForm();
+        } else if (templatePath.includes('profile.html')) {
+            // Llama a la función global para inicializar la página de perfil.
+            if (typeof initProfilePage === 'function') initProfilePage();
         }
     };
     
@@ -143,6 +148,7 @@ async function renderPage(path) {
 
             document.title = `${userData.username}`;
             appRoot.innerHTML = profileHtml;
+            await loadAndExecuteScript('../templates/profile.html');
 
         } catch (error) {
             console.error(error);

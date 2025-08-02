@@ -88,3 +88,48 @@
   font-size: 0.9em;
   color: hsl(var(--tono-neutro), var(--saturacion-neutra), 50%);
 }
+
+/* Botón para cerrar sesión */
+#logout-button {
+  /* --- Colores y Apariencia --- */
+  /* Rojo para indicar una acción destructiva o de advertencia, como cerrar sesión */
+  background-color: hsl(0, 80%, 60%); 
+  /* Borde rojo más oscuro para dar profundidad */
+  border: 1px solid hsl(0, 70%, 45%);     
+  /* Texto en color blanco para máxima legibilidad sobre el fondo rojo */
+  color: #FFFFFF;                     
+
+  /* --- Diseño y Espaciado --- */
+  /* Permite alinear el icono y el texto correctamente en la misma línea */
+  display: inline-flex;       
+  /* Centra verticalmente el contenido (icono y texto) dentro del botón */
+  align-items: center;        
+  /* Espacio de 8px entre el icono SVG y el texto "Salir" */
+  gap: 8px;                   
+  /* Margen superior para separarlo de la sección de metadatos */
+  margin-top: 25px;           
+  /* Espaciado interno generoso para que el botón sea fácil de pulsar */
+  padding: 10px 20px;         
+  
+  /* --- Tipografía y Comportamiento --- */
+  font-weight: bold;          /* Texto en negrita para darle énfasis */
+  border-radius: 8px;         /* Bordes redondeados para un aspecto moderno */
+  cursor: pointer;            /* Cursor de mano para indicar que el elemento es interactivo */
+  /* Transición suave para los cambios de color al pasar el cursor */
+  transition: background-color 0.2s ease, border-color 0.2s ease; 
+}
+
+/* Efecto visual al pasar el cursor sobre el botón de cerrar sesión */
+#logout-button:hover {
+  /* El fondo se oscurece ligeramente para dar feedback visual al usuario */
+  background-color: hsl(0, 80%, 55%); 
+  /* El borde también se oscurece para mantener la consistencia del diseño */
+  border-color: hsl(0, 70%, 40%);
+}
+
+/* Estilo para el icono SVG que se encuentra dentro del botón */
+#logout-button svg {
+  /* La propiedad 'currentColor' hace que el trazo del icono herede el color del texto del botón (blanco) */
+  /* Esto asegura que si se cambia el color del texto del botón, el icono se actualizará automáticamente */
+  stroke: currentColor; 
+}
