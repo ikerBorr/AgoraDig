@@ -1,5 +1,5 @@
 // Se importa la librería bcrypt, indispensable para la comparación de hashes.
-const bcrypt = require('bcryptjs');
+const bcrypt = require('bcrypt');
 
 /**
  * @param {string} submittedPIN
