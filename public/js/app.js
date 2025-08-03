@@ -95,10 +95,10 @@ async function renderPage(path) {
     if (path === '/' || path === '/home') {
         templatePath = './templates/home.html';
         document.title = 'Inicio';
-    } else if (path === '/about-AD' || path === '/about') {
+    } else if (path === '/about' || path === '/about-AgoraDig' || path === '/about-us') {
         templatePath = './templates/about.html';
-        document.title = 'Sobre mí';
-    } else if (path === '/contact') {
+        document.title = 'Acerca';
+    } else if (path === '/contact' || path === '/contact-us') {
         templatePath = './templates/contact.html';
         document.title = 'Contacto';
     } else if (path === '/register') {
