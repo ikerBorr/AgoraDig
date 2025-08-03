@@ -314,7 +314,7 @@ app.post('/register',
         const hashedPassword = await bcrypt.hash(password, salt);
         
         // Generar un PIN de recuperación único y hashearlo.
-        const plainTextRecoveryPIN = crypto.randomBytes(5).toString('hex').toUpperCase();
+        const plainTextRecoveryPIN = crypto.randomBytes(8).toString('hex').toUpperCase();
         const hashedRecoveryPIN = await bcrypt.hash(plainTextRecoveryPIN, salt);
 
         // Crear una nueva instancia del modelo User.
