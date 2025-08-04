@@ -65,7 +65,7 @@ app.use(session({
     saveUninitialized: false,                // No crear sesión hasta que algo se almacene.
     store: MongoStore.create({ mongoUrl: mongoUrl }), // Almacenar las sesiones en la base de datos MongoDB.
     cookie: { 
-        maxAge: 1000 * 60 * 60 * 24 * 7,     // Duración de la cookie: 7 días.
+        maxAge: 1000 * 60 * 60 * 24 * 14,     // Duración de la cookie: 14 días.
         secure: process.env.NODE_ENV === 'production', // Asegura que la cookie solo se envíe sobre HTTPS en producción.
         httpOnly: true,                      // Previene que la cookie sea accesible desde el JavaScript del cliente (mitiga ataques XSS).
         sameSite: 'lax'                      // Mitiga ataques de falsificación de petición en sitios cruzados (CSRF).
@@ -138,15 +138,15 @@ const userSchema = new mongoose.Schema({
     profilePicturePath: { type: String },
 
     // Preferencias del usuario
-    acceptsPublicity: { type: Boolean, default: false },
+    acceptsPublicity: { type: Boolean, default: false, index: true },
 
     // Metadatos de la cuenta
-    role: { type: String, enum: ['user', 'admin', 'moderator'], default: 'user' },
-    userStatus: { type: String, enum: ['active', 'verified', 'banned'], default: 'active' }
-
+    role: { type: String, enum: ['user', 'admin', 'moderator'], default: 'user', index: true },
+    userStatus: { type: String, enum: ['active', 'verified', 'banned'], default: 'active', index: true },
+    strikes: { type: Number, default: 0 }
 }, { 
     // `timestamps: true` añade automáticamente los campos `createdAt` y `updatedAt`.
-    timestamps: true
+    timestamps: true,
 });
 
 const User = mongoose.model('User', userSchema);

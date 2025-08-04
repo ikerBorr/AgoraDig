@@ -142,7 +142,7 @@ async function renderPage(path) {
             // lo que previene vulnerabilidades de Cross-Site Scripting (XSS).
             const profilePicture = appRoot.querySelector('.profile-picture');
             if (profilePicture) {
-                profilePicture.src = userData.profilePicturePath || '../images/default-avatar.png';
+                profilePicture.src = userData.profilePicturePath || '../images/default-avatar.webp';
                 profilePicture.alt = `Foto de perfil de ${userData.username}`;
             }
             

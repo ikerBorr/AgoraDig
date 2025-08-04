@@ -103,3 +103,11 @@ section.form {
   background-color: hsl(0, 80%, 92%);
   color: hsl(0, 60%, 40%);
 }
+
+/* --- Google Forms --- */
+.google-form {
+  width: 100%;      /* Ocupa el 100% del ancho del contenedor padre */
+  max-width: 640px; /* Opcional: Evita que se estire demasiado en pantallas grandes */
+  height: 80vh;     /* Altura relativa al 80% de la altura de la pantalla (viewport) */
+  border: none;     /* Buena práctica para asegurar que no tenga borde */
+}
