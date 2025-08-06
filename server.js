@@ -105,6 +105,21 @@ const sensitiveRouteLimiter = rateLimit({
 // Aplicar el limitador global a todas las peticiones entrantes.
 app.use(DoSLimiter);
 
+/**
+ * @description Middleware para verificar si un usuario está autenticado.
+ * Comprueba la existencia de `req.session.userId`. Si no existe, rechaza la
+ * petición con un estado 401. Si existe, permite que la petición continúe
+ * hacia el siguiente manejador.
+ * @param {object} req - Objeto de la petición de Express.
+ * @param {object} res - Objeto de la respuesta de Express.
+ * @param {function} next - Función callback para pasar al siguiente middleware.
+ */
+const isAuthenticated = (req, res, next) => {
+    if (!req.session.userId) {
+        return res.status(401).json({ message: 'Acceso no autorizado. Por favor, inicie sesión.' });
+    }
+    next();
+};
 
 // =================================================================
 //  BD CONNECTION
@@ -139,7 +154,7 @@ const userSchema = new mongoose.Schema({
     profilePicturePath: { type: String },
 
     // Preferencias del usuario
-    acceptsPublicity: { type: Boolean, default: false, index: true },
+    acceptsPublicity: { type: Boolean, default: false, index: true }, // index: true optimiza las búsquedas por este campo.
 
     // Metadatos de la cuenta
     role: { type: String, enum: ['user', 'admin', 'moderator'], default: 'user', index: true },
@@ -164,7 +179,7 @@ const upload = multer({
 });
 
 /**
- * @description Esquema de Mongoose para el modelo de Mensaj.
+ * @description Esquema de Mongoose para el modelo de Mensaje.
  * Define la estructura, tipos de datos y validaciones para los documentos de mensajes en la base de datos.
  */
 const messageSchema = new mongoose.Schema({
@@ -182,12 +197,17 @@ const messageSchema = new mongoose.Schema({
     messageStatus: { type: String, enum: ['active', 'deleted', 'deletedByModerator'], default: 'active', index: true }
 }, { 
     // `timestamps: true` añade automáticamente los campos `createdAt` y `updatedAt`.
-    timestamps: true
+    timestamps: true,
+    // `toJSON` y `toObject` con `virtuals: true` asegura que los campos virtuales se incluyan al convertir a JSON.
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
 });
 
-// Se crea un índice compuesto para ordenar por mensajes activos y recientes.
+// Se crea un índice compuesto para ordenar por mensajes activos y recientes, una consulta muy común.
 messageSchema.index({ messageStatus: 1, createdAt: -1 });
 
+// Se define un campo virtual `likeCount` que calcula el número de 'likes' sin almacenarlo en la BD.
+// Esto ahorra espacio y evita inconsistencias, calculándose en tiempo de ejecución.
 messageSchema.virtual('likeCount').get(function() { return this.likes.length; });
 const Message = mongoose.model('Message', messageSchema);
 
@@ -413,7 +433,7 @@ app.post('/register',
 /**
  * @route   POST /logout
  * @description Cierra la sesión del usuario actual destruyendo la sesión en el servidor.
- * @access  Private (requiere estar autenticado)
+ * @access  Private (requiere estar autenticado a través del middleware `isAuthenticated` si se aplicara a nivel de ruta)
  * @returns {object} 200 - Mensaje de éxito.
  * @returns {object} 500 - Si no se pudo destruir la sesión.
  */
@@ -509,6 +529,72 @@ app.get('/api/messages', async (req, res) => {
     }
 });
 
+/**
+ * @route   POST /api/messages
+ * @description Crea un nuevo mensaje en el foro.
+ * @access  Private (requiere estar autenticado y no baneado)
+ * @param {string} req.body.title - El título del mensaje.
+ * @param {string} req.body.content - El contenido del mensaje.
+ * @param {string} req.body.hashtags - Una cadena de texto con los hashtags (ej: "#tag1 #tag2").
+ * @returns {object} 201 - El objeto del mensaje recién creado.
+ * @returns {object} 400 - Errores de validación de los datos.
+ * @returns {object} 401 - Si el usuario no está autenticado.
+ * @returns {object} 403 - Si el usuario está baneado.
+ * @returns {object} 500 - Error interno del servidor.
+ */
+app.post('/api/messages', isAuthenticated, async (req, res) => {
+    try {
+        const { title, content, hashtags } = req.body;
+
+        // --- Validación de Autorización (status del usuario) ---
+        const user = await User.findById(req.session.userId).select('userStatus');
+        if (!user) {
+            return res.status(404).json({ message: 'Usuario no encontrado.' });
+        }
+        if (user.userStatus === 'banned') {
+            return res.status(403).json({ message: 'Tu cuenta ha sido suspendida. No puedes publicar mensajes.' });
+        }
+
+        // --- Validación de Contenido ---
+        if (!title || title.trim().length === 0) {
+            return res.status(400).json({ message: 'El título es obligatorio.' });
+        }
+        if (!content || content.trim().length === 0) {
+            return res.status(400).json({ message: 'El contenido es obligatorio.' });
+        }
+        if (title.length > 100) {
+            return res.status(400).json({ message: 'El título no puede exceder los 100 caracteres.' });
+        }
+        if (content.length > 1500) {
+            return res.status(400).json({ message: 'El contenido no puede exceder los 1500 caracteres.' });
+        }
+
+        // --- Procesamiento de Hashtags ---
+        // Extrae hashtags de una cadena de texto (ej: "Mi mensaje #hola #mundo") y los convierte en un array.
+        const parsedHashtags = hashtags ? hashtags.match(/#(\w+)/g)?.map(h => h.substring(1)) || [] : [];
+
+        // --- Creación del Mensaje ---
+        const newMessage = new Message({
+            title,
+            content,
+            hashtags: parsedHashtags,
+            sender: req.session.userId // Se vincula el mensaje con el ID del usuario logueado.
+        });
+
+        await newMessage.save();
+
+        // Poblamos los datos del sender para devolver el objeto completo al frontend
+        // y que pueda renderizar la tarjeta sin hacer otra petición.
+        await newMessage.populate('sender', 'username profilePicturePath');
+        
+        res.status(201).json(newMessage);
+
+    } catch (error) {
+        console.error('Error en POST /api/messages:', error);
+        res.status(500).json({ message: 'Error en el servidor al crear el mensaje.' });
+    }
+});
+
 
 // =================================================================
 //  CATCH-ALL AND START SERVER
@@ -516,7 +602,9 @@ app.get('/api/messages', async (req, res) => {
 
 /**
  * @description Ruta "catch-all" o comodín. Redirige cualquier petición GET no reconocida
- * a la página principal del frontend (index.html). Esencial para el funcionamiento de Single Page Applications (SPAs).
+ * por las rutas anteriores a la página principal del frontend (index.html).
+ * Esto es esencial para el correcto funcionamiento de Single Page Applications (SPAs),
+ * ya que permite que el enrutamiento del lado del cliente se haga cargo de las URLs.
  */
 app.get('*', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
 

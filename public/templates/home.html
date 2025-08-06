@@ -1,9 +1,35 @@
 <section id="home-feed" class="center center-text">
-    <h1>¡Bienvenid@ a Ágora Dig!</h1>
+    <div>
+        <h1>¡Bienvenid@ a Ágora Dig!</h1>
+        <h2>Mensajes recientes</h2>
+        <button id="open-create-message-modal-btn" class="button-primary" title="Crear un nuevo mensaje">Publicar</button>
+    </div>
 
     <div id="messages-container"></div>
-
     <div id="feed-loader" class="loader hidden"></div>
-
     <button id="load-more-btn" class="button-primary hidden">Cargar más</button>
 </section>
+
+<div id="create-message-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+        <button id="close-modal-btn" class="close-button" title="Cerrar">&times;</button>
+        <h2>Nueva Publicación</h2>
+        <form id="create-message-form">
+            <div class="form-group">
+                <label for="message-title">Título</label>
+                <input type="text" id="message-title" name="title" required maxlength="100">
+            </div>
+            <div class="form-group">
+                <label for="message-content">Contenido</label>
+                <textarea id="message-content" name="content" rows="6" required maxlength="1500"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="message-hashtags">Hashtags</label>
+                <input type="text" id="message-hashtags" name="hashtags" placeholder="Ej: #tecnologia #debate">
+                <small>Escribe hashtags separados por espacios.</small>
+            </div>
+            <div id="modal-error-message" class="error-text hidden"></div>
+            <button type="submit" class="button-primary">Publicar</button>
+        </form>
+    </div>
+</div>

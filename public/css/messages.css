@@ -1,0 +1,229 @@
+/**
+ * @file messages.css
+ * @description Hoja de estilos para los componentes del feed de Ágora Digital.
+ * Define la apariencia de las tarjetas de mensajes, el contenedor del feed,
+ * y el modal de creación de nuevas publicaciones.
+ */
+
+/* ==========================================================================
+   # Estilos del Feed de Mensajes
+   ========================================================================== */
+
+/* --- Contenedor de los Mensajes --- */
+#messages-container {
+    display: flex;
+    flex-direction: column; /* Apila las tarjetas de mensaje verticalmente. */
+    gap: 1.5rem; /* Define un espacio consistente entre cada tarjeta. */
+    width: 100%;
+}
+
+/* --- Tarjeta de Mensaje Individual --- */
+.message-card {
+    background-color: var(--color-fondo-tarjeta); /* Utiliza una variable CSS para el color de fondo, facilitando el theming. */
+    border: 1px solid var(--color-borde);
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1); /* Sombra sutil para dar profundidad. */
+    padding: 1.5rem;
+    transition: box-shadow 0.2s ease; /* Transición suave para el efecto hover. */
+    text-align: left; /* Asegura que el texto esté alineado a la izquierda, evitando herencias no deseadas. */
+}
+
+/* Al pasar el cursor, la sombra se intensifica para dar feedback visual al usuario. */
+.message-card:hover {
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+}
+
+/* --- Cabecera de la Tarjeta --- */
+.card-header {
+    display: flex;
+    justify-content: space-between; /* Coloca la información del autor y los 'likes' en extremos opuestos. */
+    align-items: center; /* Centra verticalmente los elementos de la cabecera. */
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--color-borde-suave); /* Línea divisoria sutil. */
+}
+
+.author-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem; /* Espacio entre el avatar y el nombre de usuario. */
+}
+
+/* Selector de ID para el avatar del autor. */
+#author-avatar {
+    max-width: 50px;
+    max-height: 50px;
+    height: auto;
+    width: auto;
+    border-radius: 50%; /* Crea la forma circular del avatar. */
+    object-fit: cover; /* Asegura que la imagen del avatar llene el espacio sin deformarse. */
+    flex-shrink: 0; /* Evita que el avatar se encoja si el nombre de usuario es muy largo. */
+}
+
+.author-username {
+    font-weight: 600;
+    color: var(--color-texto);
+}
+
+.likes-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem; /* Espacio entre el número de 'likes' y el icono. */
+    font-weight: 500;
+    color: var(--color-texto-secundario); /* Color más tenue para información secundaria. */
+}
+
+.likes-info svg {
+    width: 20px;
+    height: 20px;
+    /* Al no definir 'fill' o 'stroke', el SVG hereda el 'color' de su elemento padre (.likes-info), 
+       asegurando que el icono y el texto siempre tengan el mismo color. */
+}
+
+/* --- Cuerpo de la Tarjeta --- */
+.card-body .message-title {
+    font-size: 1.4rem;
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+    color: var(--color-titulo-mensaje);
+}
+
+.card-body .message-content {
+    font-size: 1rem;
+    line-height: 1.6;
+    color: var(--color-texto);
+    white-space: pre-wrap; /* Respeta los saltos de línea y múltiples espacios del texto original. */
+    word-break: break-word; /* Evita que palabras muy largas se desborden y rompan el layout de la tarjeta. */
+}
+
+/* --- Mensaje de Feed Vacío --- */
+.empty-feed-message {
+    text-align: center;
+    padding: 2rem 1rem;
+    background-color: var(--color-fondo-tarjeta);
+    border: 1px dashed var(--color-borde); /* Un borde discontinuo sugiere un estado "vacío" o de "placeholder". */
+    border-radius: 8px;
+}
+
+.empty-feed-message p {
+    margin: 0;
+    font-style: italic;
+    color: var(--color-texto-secundario);
+}
+
+
+/* ==========================================================================
+   # Estilos del Modal de Creación (Anteriormente modal.css)
+   ========================================================================== */
+
+/* --- Contenedor Principal del Modal y Superposición (Overlay) --- */
+#create-message-modal {
+    position: fixed; /* Fija el modal respecto al viewport para cubrir toda la pantalla. */
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background-color: rgba(0, 0, 0, 0.7); /* Fondo oscuro semitransparente. */
+    display: flex;
+    justify-content: center; /* Centra el contenido horizontalmente. */
+    align-items: center;     /* Centra el contenido verticalmente. */
+    z-index: 1000;           /* Asegura que el modal se muestre por encima de todo lo demás. */
+    opacity: 0;
+    visibility: hidden; /* Oculta el modal y lo saca del flujo de accesibilidad (lectores de pantalla). */
+    transition: opacity 0.3s ease, visibility 0.3s ease; /* Transiciones para aparecer y desaparecer suavemente. */
+    padding: 1rem;
+}
+
+/* Cuando el modal es visible (no tiene la clase .hidden), se aplican estas propiedades. */
+#create-message-modal:not(.hidden) {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* --- Contenido del Modal (La "caja" principal) --- */
+.modal-content {
+    background-color: var(--color-fondo);
+    padding: 2rem;
+    border-radius: 8px;
+    width: 70vw; /* Ancho adaptable al tamaño de la ventana. */
+    max-width: 700px; /* Ancho máximo para mantener la legibilidad en pantallas grandes. */
+    position: relative; /* Contexto de posicionamiento para el botón de cierre. */
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    transform: translateY(-50px); /* Posición inicial fuera de la vista para la animación. */
+    transition: transform 0.3s ease; /* Animación de "caída". */
+}
+
+/* Cuando el modal es visible, vuelve a su posición original con una transición. */
+#create-message-modal:not(.hidden) .modal-content {
+    transform: translateY(0);
+}
+
+/* --- Botón de Cierre (X) --- */
+.close-button {
+    position: absolute; /* Posicionado relativo a .modal-content. */
+    top: 10px;
+    right: 15px;
+    background: none;
+    border: none;
+    font-size: 2rem;
+    color: var(--color-texto);
+    cursor: pointer;
+    line-height: 1; /* Evita altura de línea extra que podría desalinear el botón. */
+}
+
+.modal-content h2 {
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+    text-align: center;
+    font-size: 1.8rem;
+    color: var(--color-texto);
+}
+
+/* --- Formulario Dentro del Modal --- */
+#create-message-form .form-group {
+    margin-bottom: 1.25rem;
+}
+
+#create-message-form label {
+    display: block; /* La etiqueta ocupa su propia línea sobre el input. */
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--color-texto);
+}
+
+#create-message-form input[type="text"],
+#create-message-form textarea {
+    width: 100%;
+    padding: 0.75rem;
+    font-size: 1rem;
+    box-sizing: border-box; /* El padding y el borde se incluyen en el width total. */
+    border-radius: 4px;
+    transition: border-color 0.2s ease;
+    background-color: var(--color-fondo-input);
+    color: var(--color-texto-input);
+    border: 1px solid var(--color-borde);
+}
+
+/* Estilos de foco para mejorar la accesibilidad y la experiencia de usuario. */
+#create-message-form input[type="text"]:focus,
+#create-message-form textarea:focus {
+    outline: none; /* Se elimina el contorno por defecto para usar una sombra personalizada. */
+    border-color: var(--color-enlace);
+    box-shadow: 0 0 0 3px var(--color-foco-primario);
+}
+
+#create-message-form textarea {
+    resize: vertical; /* Permite al usuario redimensionar el textarea solo verticalmente, evitando roturas del layout. */
+    min-height: 120px;
+}
+
+#create-message-form button[type="submit"] {
+    width: 100%;
+    margin-top: 1rem;
+}
+
+/* --- Mensajes de Error en el Modal --- */
+#modal-error-message {
+    text-align: center;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    color: #e74c3c; /* Un color rojo universalmente reconocido para errores. */
+}

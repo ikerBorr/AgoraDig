@@ -28,17 +28,19 @@ function createMessageCard(message) {
     const card = document.createElement('div');
     card.className = 'message-card';
 
-    // Utiliza textContent para prevenir inyección de HTML (XSS)
+    // Utiliza textContent para prevenir inyección de HTML (XSS).
+    // Se comprueba la existencia del sender para evitar errores si los datos no vienen populados.
     const authorUsername = message.sender ? message.sender.username : 'Usuario Desconocido';
     const authorAvatar = message.sender ? message.sender.profilePicturePath : 'images/default-avatar.webp';
 
-    // El virtual 'likeCount' que creamos en Mongoose está disponible aquí
+    // El virtual 'likeCount' que creamos en Mongoose está disponible aquí.
+    // Se añade un fallback por si el conteo no estuviera definido.
     const likeCount = message.likeCount !== undefined ? message.likeCount : (message.likes ? message.likes.length : 0);
 
     card.innerHTML = `
         <div class="card-header">
             <div class="author-info">
-                <img src="${authorAvatar}" alt="Avatar de ${authorUsername}" class="author-avatar">
+                <img src="${authorAvatar}" alt="Avatar de ${authorUsername}" id="author-avatar">
                 <span class="author-username">@${authorUsername}</span>
             </div>
             <div class="likes-info">
@@ -47,7 +49,7 @@ function createMessageCard(message) {
             </div>
         </div>
         <div class="card-body">
-            <h2 class="message-title">${message.title}</h2>
+            <h4 class="message-title">${message.title}</h4>
             <p class="message-content">${message.content}</p>
         </div>
     `;
@@ -92,14 +94,12 @@ async function loadAndExecuteScript(templatePath) {
     
     // El script se ejecuta al cargarse. Su evento 'onload' llama a la función de inicialización correspondiente.
     script.onload = () => {
+        // Se comprueba que la función de inicialización exista en el ámbito global antes de llamarla.
         if (templatePath.includes('register.html')) {
-            // Llama a la función global para inicializar el formulario de registro.
             if (typeof initRegisterForm === 'function') initRegisterForm();
         } else if (templatePath.includes('login.html')) {
-            // Llama a la función global para inicializar el formulario de login.
             if (typeof initLoginForm === 'function') initLoginForm();
         } else if (templatePath.includes('profile.html')) {
-            // Llama a la función global para inicializar la página de perfil.
             if (typeof initProfilePage === 'function') initProfilePage();
         }
     };
@@ -135,25 +135,31 @@ async function fetchTemplate(path) {
  * @returns {Promise<void>}
  */
 async function renderPage(path) {
-    // Muestra el loader y oculta el contenido principal durante la carga.
+    // Muestra el loader y oculta el contenido principal durante la carga para mejorar la UX.
     loaderContainer.classList.remove('hidden');
     appRoot.classList.add('hidden');
 
     let templatePath = '';
     
     // --- Lógica de Enrutamiento ---
+    // Este bloque 'if-else if' actúa como un enrutador del lado del cliente.
     if (path === '/' || path === '/home') {
         appRoot.innerHTML = await fetchTemplate('./templates/home.html');
         document.title = 'Inicio';
 
+        // --- LÓGICA PARA CARGAR EL FEED DE MENSAJES ---
         const messagesContainer = document.getElementById('messages-container');
         const loadMoreBtn = document.getElementById('load-more-btn');
         const feedLoader = document.getElementById('feed-loader');
         let currentPage = 1;
         let totalPages = 1;
 
+        /**
+         * Función asíncrona para cargar mensajes de la API de forma paginada.
+         * Gestiona el estado de los loaders y del botón "Cargar más".
+         */
         const loadMessages = async () => {
-            if (currentPage > totalPages) return; // No hacer nada si ya se cargaron todas las páginas
+            if (currentPage > totalPages) return; // Detener si ya se cargaron todas las páginas.
 
             loadMoreBtn.classList.add('hidden');
             feedLoader.classList.remove('hidden');
@@ -164,7 +170,7 @@ async function renderPage(path) {
 
                 const data = await response.json();
                 
-                // Si es la primera página y no vienen mensajes, muestra un mensaje especial.
+                // Caso especial: si es la primera página y no hay mensajes, mostrar un mensaje de bienvenida.
                 if (currentPage === 1 && data.messages.length === 0) {
                     messagesContainer.innerHTML = `
                         <div class="empty-feed-message">
@@ -173,19 +179,20 @@ async function renderPage(path) {
                             <br>
                         </div>
                     `;
-                    feedLoader.classList.add('hidden'); // Ocultar el loader ya que no hay nada más que cargar.
-                    return; // Detener la ejecución de la función aquí.
+                    feedLoader.classList.add('hidden');
+                    return; 
                 }
 
+                // Itera sobre los mensajes recibidos y los añade al contenedor.
                 data.messages.forEach(message => {
                     const messageCard = createMessageCard(message);
                     messagesContainer.appendChild(messageCard);
                 });
 
                 totalPages = data.totalPages;
-                currentPage++;
+                currentPage++; // Incrementar el contador de página para la siguiente petición.
 
-                // Mostrar el botón "Cargar más" solo si hay más páginas por cargar
+                // Mostrar el botón "Cargar más" solo si quedan páginas por cargar.
                 if (currentPage <= totalPages) {
                     loadMoreBtn.classList.remove('hidden');
                 }
@@ -194,20 +201,90 @@ async function renderPage(path) {
                 console.error(error);
                 messagesContainer.innerHTML = '<p class="error-text">No se pudieron cargar los mensajes. Inténtalo de nuevo más tarde.</p>';
             } finally {
+                // Asegurarse de ocultar el loader al finalizar, tanto en caso de éxito como de error.
                 feedLoader.classList.add('hidden');
             }
         };
 
-        // Cargar la primera página de mensajes al entrar en Home
+        // Carga inicial de mensajes al renderizar la página de inicio.
         await loadMessages();
 
-        // Añadir el listener al botón "Cargar más"
+        // Asigna el evento al botón para cargar las páginas siguientes.
         loadMoreBtn.addEventListener('click', loadMessages);
 
+        // --- LÓGICA PARA EL MODAL DE CREACIÓN DE MENSAJES ---
+        const openModalBtn = document.getElementById('open-create-message-modal-btn');
+        const modalOverlay = document.getElementById('create-message-modal');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const messageForm = document.getElementById('create-message-form');
+        const modalError = document.getElementById('modal-error-message');
+
+        const showModal = () => modalOverlay.classList.remove('hidden');
+        const hideModal = () => {
+            modalOverlay.classList.add('hidden');
+            modalError.classList.add('hidden'); // Oculta errores al cerrar.
+            messageForm.reset(); // Limpia el formulario para la próxima vez que se abra.
+        };
+        
+        // Listeners para abrir y cerrar el modal.
+        openModalBtn.addEventListener('click', showModal);
+        closeModalBtn.addEventListener('click', hideModal);
+        modalOverlay.addEventListener('click', (e) => {
+            // Cierra el modal solo si se hace clic en el fondo gris (el overlay mismo).
+            if (e.target === modalOverlay) {
+                hideModal();
+            }
+        });
+
+        // Listener para gestionar el envío del formulario de nuevo mensaje.
+        messageForm.addEventListener('submit', async (e) => {
+            e.preventDefault(); // Evita la recarga de la página.
+            modalError.classList.add('hidden'); // Ocultar errores previos.
+            
+            const formData = new FormData(messageForm);
+            const data = Object.fromEntries(formData.entries());
+
+            try {
+                const response = await fetch('/api/messages', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const responseData = await response.json();
+
+                if (!response.ok) {
+                    // Si la respuesta no es exitosa, se lanza un error con el mensaje del servidor.
+                    throw new Error(responseData.message || 'Error desconocido al publicar.');
+                }
+
+                // Éxito: el servidor devuelve el nuevo post creado.
+                const newPost = responseData;
+                const newCard = createMessageCard(newPost);
+                
+                const emptyMessage = messagesContainer.querySelector('.empty-feed-message');
+                if (emptyMessage) {
+                    // Si el mensaje de "no hay posts" está visible, se elimina.
+                    messagesContainer.innerHTML = '';
+                }
+
+                // Añade la nueva tarjeta al principio del feed para una actualización visual inmediata (UI optimista).
+                messagesContainer.prepend(newCard); 
+                hideModal(); // Cierra y resetea el modal.
+
+            } catch (error) {
+                // Muestra el mensaje de error devuelto por la API en el modal.
+                modalError.textContent = error.message;
+                modalError.classList.remove('hidden');
+            }
+        });
+
+        // Se vacía templatePath porque el renderizado de la home es dinámico y ya se ha completado.
         templatePath = '';
+
     } else if (path === '/about' || path === '/about-AgoraDig' || path === '/about-us') {
         templatePath = './templates/about.html';
-        document.title = 'Acerca';
+        document.title = 'Acerca de';
     } else if (path === '/contact' || path === '/contact-us') {
         templatePath = './templates/contact.html';
         document.title = 'Contacto';
@@ -228,6 +305,7 @@ async function renderPage(path) {
             if (!response.ok) {
                 // Si el usuario no está autenticado (401), se le redirige a la página de login.
                 if (response.status === 401) {
+                    // Cambia la URL y renderiza la página de login sin recargar.
                     window.history.pushState({}, '', '/login');
                     await renderPage('/login');
                     return; // Detiene la ejecución para evitar más renderizados.
@@ -326,8 +404,8 @@ async function handleNavClick(event) {
     // Busca el enlace `<a>` más cercano al elemento clickeado.
     const targetLink = event.target.closest('a');
     
-    // Procesa el clic solo si es un enlace de navegación interna (sin target="_blank").
-    if (targetLink && !targetLink.target) {
+    // Procesa el clic solo si es un enlace de navegación interna (sin target="_blank" y con href).
+    if (targetLink && targetLink.hasAttribute('href') && !targetLink.target) {
         event.preventDefault(); // Previene la navegación por defecto del navegador.
         const path = targetLink.getAttribute('href');
         
@@ -341,7 +419,7 @@ async function handleNavClick(event) {
 
 // --- Inicialización de Event Listeners ---
 
-// Listener para la navegación dentro de la SPA.
+// Listener para la navegación dentro de la SPA (delegación de eventos en 'document').
 document.addEventListener('click', handleNavClick);
 // Listener para los botones de "atrás" y "adelante" del navegador.
 window.addEventListener('popstate', () => { renderPage(window.location.pathname); });
