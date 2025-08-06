@@ -162,6 +162,34 @@ const upload = multer({
   }
 });
 
+/**
+ * @description Esquema de Mongoose para el modelo de Mensaj.
+ * Define la estructura, tipos de datos y validaciones para los documentos de mensajes en la base de datos.
+ */
+const messageSchema = new mongoose.Schema({
+    // Datos del mensaje
+    sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    referencedMessage: { type: mongoose.Schema.Types.ObjectId, ref: 'Message', default: null, index: true },
+
+    // Contenido del mensaje
+    title: { type: String, required: true, trim: true, maxlength: 100 },
+    content: { type: String, required: true, trim: true , maxlength: 1500},
+    hashtags: [{ type: String, trim: true, lowercase: true, index: true }],
+
+    // Metadatos del mensaje
+    likes: { type: [mongoose.Schema.Types.ObjectId], ref: 'User', default: [] },
+    messageStatus: { type: String, enum: ['active', 'deleted', 'deletedByModerator'], default: 'active', index: true }
+}, { 
+    // `timestamps: true` añade automáticamente los campos `createdAt` y `updatedAt`.
+    timestamps: true
+});
+
+// Se crea un índice compuesto para ordenar por mensajes activos y recientes.
+messageSchema.index({ messageStatus: 1, createdAt: -1 });
+
+messageSchema.virtual('likeCount').get(function() { return this.likes.length; });
+const Message = mongoose.model('Message', messageSchema);
+
 
 // =================================================================
 //  ROUTES
