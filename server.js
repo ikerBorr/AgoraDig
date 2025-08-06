@@ -13,7 +13,7 @@
 // Módulos nativos de Node.js
 const path = require('path');
 const fs = require('fs');
-const crypto = require('crypto');
+const crypto =require('crypto');
 
 // Módulos de NPM (dependencias de terceros)
 require('dotenv').config(); // Carga las variables de entorno desde un archivo .env al objeto process.env.
@@ -241,6 +241,7 @@ app.post('/login', sensitiveRouteLimiter, async (req, res) => {
         }
 
         // Buscar usuario por nombre de usuario o email, incluyendo la contraseña explícitamente en el resultado.
+        // La consulta $or permite buscar en múltiples campos. Se usa select('+password') porque el esquema lo oculta por defecto.
         const user = await User.findOne({
             $or: [{ username: loginIdentifier }, { email: loginIdentifier.toLowerCase() }]
         }).select('+password');
@@ -249,13 +250,13 @@ app.post('/login', sensitiveRouteLimiter, async (req, res) => {
             return res.status(401).json({ errors: { loginIdentifier: 'El usuario o email no existe.' } });
         }
 
-        // Comparar la contraseña proporcionada con la hasheada en la BD.
+        // Comparar la contraseña proporcionada con la hasheada en la BD usando bcrypt para seguridad.
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             return res.status(401).json({ errors: { password: 'La contraseña es incorrecta.' } });
         }
         
-        // Almacenar el ID del usuario en la sesión para mantenerlo autenticado.
+        // Almacenar el ID del usuario en la sesión para mantenerlo autenticado en futuras peticiones.
         req.session.userId = user._id;
 
         res.status(200).json({ message: 'Inicio de sesión exitoso.' });
@@ -279,7 +280,7 @@ app.post('/login', sensitiveRouteLimiter, async (req, res) => {
  * @returns {object} 500 - Error interno del servidor.
  */
 app.post('/register', 
-    // 1. Middleware para gestionar la subida del archivo.
+    // 1. Middleware para gestionar la subida del archivo. Se manejan errores específicos de Multer.
     (req, res, next) => {
         upload.single('profilePicture')(req, res, (err) => {
             if (err instanceof multer.MulterError) {
@@ -299,6 +300,7 @@ app.post('/register',
     // 3. Controlador principal de la ruta.
     async (req, res) => {
 
+    // El archivo subido por Multer se encuentra en req.file y se almacena temporalmente.
     const tempFile = req.file;
 
     try {
@@ -308,43 +310,50 @@ app.post('/register',
             description, acceptsPublicity 
         } = req.body;
 
+        // --- Función de limpieza para eliminar el archivo temporal si algo falla ---
+        const cleanupTempFile = () => {
+            if (tempFile && fs.existsSync(tempFile.path)) {
+                fs.unlinkSync(tempFile.path);
+            }
+        };
+
         // --- Validaciones de campos ---
         if (!firstName || !lastName || !username || !email || !password || !confirmPassword || !dateOfBirth || !tempFile) {
-            if (tempFile) fs.unlinkSync(tempFile.path); // Eliminar archivo temporal si la validación falla.
+            cleanupTempFile(); // Eliminar archivo temporal si la validación falla.
             return res.status(400).json({ errors: { general: 'Faltan campos por rellenar.' } });
         }
         
         const nameRegex = /^[\p{L}\s]+$/u;
         if (!nameRegex.test(firstName)) {
-            if (tempFile) fs.unlinkSync(tempFile.path);
+            cleanupTempFile();
             return res.status(400).json({ errors: { firstName: 'El nombre solo puede contener letras y espacios.' } });
         }
         if (!nameRegex.test(lastName)) {
-            if (tempFile) fs.unlinkSync(tempFile.path);
+            cleanupTempFile();
             return res.status(400).json({ errors: { lastName: 'Los apellidos solo pueden contener letras y espacios.' } });
         }
 
         if (username.length < 3 || username.length > 20) {
-            if (tempFile) fs.unlinkSync(tempFile.path);
+            cleanupTempFile();
             return res.status(400).json({ errors: { username: 'El nombre de usuario debe tener entre 3 y 20 caracteres.' } });
         }
 
         const emailRegex = /\S+@\S+\.\S+/;
         if (!emailRegex.test(email)) {
-            if (tempFile) fs.unlinkSync(tempFile.path);
+            cleanupTempFile();
             return res.status(400).json({ errors: { email: 'Por favor, introduce un formato de email válido.' } });
         }
         if (email !== confirmEmail) {
-            if (tempFile) fs.unlinkSync(tempFile.path);
+            cleanupTempFile();
             return res.status(400).json({ errors: { confirmEmail: 'Los emails no coinciden.' } });
         }
 
         if (password.length < 6) {
-            if (tempFile) fs.unlinkSync(tempFile.path);
+            cleanupTempFile();
             return res.status(400).json({ errors: { password: 'La contraseña debe tener al menos 6 caracteres.' } });
         }
         if (password !== confirmPassword) {
-            if (tempFile) fs.unlinkSync(tempFile.path);
+            cleanupTempFile();
             return res.status(400).json({ errors: { confirmPassword: 'Las contraseñas no coinciden.' } });
         }
 
@@ -352,7 +361,7 @@ app.post('/register',
         const minDate = new Date(); minDate.setHours(0,0,0,0); minDate.setFullYear(minDate.getFullYear() - 110);
         const maxDate = new Date(); maxDate.setHours(0,0,0,0); maxDate.setFullYear(maxDate.getFullYear() - 10);
         if (isNaN(birthDate.getTime()) || birthDate > maxDate || birthDate < minDate) {
-            if (tempFile) fs.unlinkSync(tempFile.path);
+            cleanupTempFile();
             return res.status(400).json({ errors: { dateOfBirth: 'La fecha de nacimiento proporcionada no es válida o eres demasiado joven para registrarte.' }});
         }
         
@@ -362,7 +371,7 @@ app.post('/register',
         const salt = await bcrypt.genSalt(12); 
         const hashedPassword = await bcrypt.hash(password, salt);
         
-        // Generar un PIN de recuperación único y hashearlo.
+        // Generar un PIN de recuperación único y hashearlo. Se usa crypto para aleatoriedad segura.
         const plainTextRecoveryPIN = crypto.randomBytes(8).toString('hex').toUpperCase();
         const hashedRecoveryPIN = await bcrypt.hash(plainTextRecoveryPIN, salt);
 
@@ -370,7 +379,7 @@ app.post('/register',
         const newUser = new User({
             firstName, lastName, dateOfBirth, 
             username, email, password: hashedPassword, recoveryPIN: hashedRecoveryPIN,
-            description, acceptsPublicity: !!acceptsPublicity,
+            description, acceptsPublicity: !!acceptsPublicity, // Convierte el valor a booleano.
         });
         await newUser.save(); // Guardar el usuario en la BD.
 
@@ -386,8 +395,8 @@ app.post('/register',
             .webp({ quality: 80 })
             .toFile(newPath);
 
-        // Eliminar el archivo temporal original subido por multer.
-        fs.unlinkSync(tempFile.path);
+        // Eliminar el archivo temporal original subido por multer, ya que el procesado ya se guardó.
+        cleanupTempFile();
 
         // Actualizar el documento del usuario con la ruta de la imagen de perfil.
         newUser.profilePicturePath = `uploads/${newFileName}`;
@@ -402,8 +411,7 @@ app.post('/register',
         });
 
     } catch (error) {
-        // Asegurarse de que el archivo temporal se elimine en caso de cualquier error en el proceso.
-        // Se comprueba si el archivo aún existe antes de intentar borrarlo para evitar errores.
+        // Bloque CATCH principal: se asegura de que el archivo temporal se elimine en caso de CUALQUIER error.
         if (tempFile && fs.existsSync(tempFile.path)) {
             fs.unlinkSync(tempFile.path);
         }
@@ -547,6 +555,7 @@ app.post('/api/messages', isAuthenticated, async (req, res) => {
         const { title, content, hashtags } = req.body;
 
         // --- Validación de Autorización (status del usuario) ---
+        // Primero, se verifica si el usuario tiene permiso para publicar.
         const user = await User.findById(req.session.userId).select('userStatus');
         if (!user) {
             return res.status(404).json({ message: 'Usuario no encontrado.' });
@@ -570,7 +579,7 @@ app.post('/api/messages', isAuthenticated, async (req, res) => {
         }
 
         // --- Procesamiento de Hashtags ---
-        // Extrae hashtags de una cadena de texto (ej: "Mi mensaje #hola #mundo") y los convierte en un array.
+        // Extrae hashtags de una cadena de texto (ej: "Mi mensaje #hola #mundo") y los convierte en un array de strings limpios.
         const parsedHashtags = hashtags ? hashtags.match(/#(\w+)/g)?.map(h => h.substring(1)) || [] : [];
 
         // --- Creación del Mensaje ---
@@ -595,6 +604,34 @@ app.post('/api/messages', isAuthenticated, async (req, res) => {
     }
 });
 
+/**
+ * @route   GET /api/users/username/:username
+ * @description Obtiene los datos del perfil PÚBLICO de un usuario por su nombre de usuario.
+ * @access  Public
+ * @param {string} req.params.username - El nombre de usuario a consultar.
+ * @returns {object} 200 - Objeto con los datos públicos del perfil del usuario.
+ * @returns {object} 404 - Si el usuario no se encuentra.
+ * @returns {object} 500 - Error interno del servidor.
+ */
+app.get('/api/users/username/:username', async (req, res) => {
+    try {
+        const { username } = req.params;
+
+        const user = await User.findOne({ username: username })
+            // Se seleccionan únicamente los campos que son seguros para ser públicos.
+            .select('firstName lastName username description profilePicturePath createdAt');
+
+        if (!user) {
+            return res.status(404).json({ message: 'Usuario no encontrado.' });
+        }
+
+        res.status(200).json(user);
+
+    } catch (error) {
+        console.error(`Error al obtener el perfil público por username ${req.params.username}:`, error);
+        res.status(500).json({ message: 'Error en el servidor.' });
+    }
+});
 
 // =================================================================
 //  CATCH-ALL AND START SERVER

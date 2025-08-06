@@ -16,7 +16,7 @@ const loaderContainer = document.getElementById('loader-container');
 
 
 // ===================================
-//  FUNCIONES DE AYUDA (HELPERS)
+//  FUNCIONES DE AYUDA
 // ===================================
 
 /**
@@ -28,20 +28,26 @@ function createMessageCard(message) {
     const card = document.createElement('div');
     card.className = 'message-card';
 
-    // Utiliza textContent para prevenir inyección de HTML (XSS).
-    // Se comprueba la existencia del sender para evitar errores si los datos no vienen populados.
-    const authorUsername = message.sender ? message.sender.username : 'Usuario Desconocido';
-    const authorAvatar = message.sender ? message.sender.profilePicturePath : 'images/default-avatar.webp';
+    // Se comprueba la existencia del sender para evitar errores si el usuario ha sido eliminado.
+    const author = message.sender || { username: 'Usuario Eliminado', profilePicturePath: '../images/default-avatar.webp', _id: null };
+    
+    // Se extraen los datos del autor para mejorar la legibilidad de la plantilla HTML.
+    const authorId = author._id;
+    const authorUsername = author.username;
+    const authorAvatar = author.profilePicturePath;
 
-    // El virtual 'likeCount' que creamos en Mongoose está disponible aquí.
-    // Se añade un fallback por si el conteo no estuviera definido.
     const likeCount = message.likeCount !== undefined ? message.likeCount : (message.likes ? message.likes.length : 0);
 
+    // Se unifica la lógica en una sola plantilla de cadena.
     card.innerHTML = `
         <div class="card-header">
             <div class="author-info">
                 <img src="${authorAvatar}" alt="Avatar de ${authorUsername}" id="author-avatar">
-                <span class="author-username">@${authorUsername}</span>
+                ${
+                    authorUsername === 'Usuario Eliminado' || !authorId
+                        ? `<span class="author-username">@${authorUsername}</span>`
+                        : `<a href="/view-profile?username=${authorUsername}" class="author-username">@${authorUsername}</a>`
+                }
             </div>
             <div class="likes-info">
                 <span>${likeCount}</span>
@@ -53,6 +59,7 @@ function createMessageCard(message) {
             <p class="message-content">${message.content}</p>
         </div>
     `;
+    
     return card;
 }
 
@@ -155,8 +162,9 @@ async function renderPage(path) {
         let totalPages = 1;
 
         /**
-         * Función asíncrona para cargar mensajes de la API de forma paginada.
+         * @description Función asíncrona para cargar mensajes de la API de forma paginada.
          * Gestiona el estado de los loaders y del botón "Cargar más".
+         * @returns {Promise<void>}
          */
         const loadMessages = async () => {
             if (currentPage > totalPages) return; // Detener si ya se cargaron todas las páginas.
@@ -219,7 +227,10 @@ async function renderPage(path) {
         const messageForm = document.getElementById('create-message-form');
         const modalError = document.getElementById('modal-error-message');
 
+        /** @description Muestra el overlay del modal. */
         const showModal = () => modalOverlay.classList.remove('hidden');
+        
+        /** @description Oculta el modal, resetea el formulario y limpia los mensajes de error. */
         const hideModal = () => {
             modalOverlay.classList.add('hidden');
             modalError.classList.add('hidden'); // Oculta errores al cerrar.
@@ -297,17 +308,63 @@ async function renderPage(path) {
     } else if (path === '/login') {
         templatePath = './templates/login.html';
         document.title = 'Iniciar Sesión';
+    } else if (path.startsWith('/view-profile')) {
+
+        try {
+            // Se extrae el nombre de usuario de los parámetros de consulta de la URL.
+            const params = new URLSearchParams(window.location.search);
+            const username = params.get('username');
+
+            if (!username) {
+                throw new Error('Nombre de usuario no especificado en la URL.');
+            }
+
+            // 1. Obtener los datos públicos del usuario desde la API.
+            const response = await fetch(`/api/users/username/${encodeURIComponent(username)}`);
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'No se pudieron cargar los datos del perfil.');
+            }
+            const userData = await response.json();
+
+            // 2. Obtener la plantilla HTML para el perfil.
+            let profileHtml = await fetchTemplate('./templates/view-profile.html');
+
+            // 3. Poblar la plantilla reemplazando los placeholders con los datos del usuario.
+            const joinDate = new Date(userData.createdAt).toLocaleDateString('es-ES', {
+                year: 'numeric', month: 'long', day: 'numeric'
+            });
+
+            profileHtml = profileHtml
+                .replace(/{{profilePicturePath}}/g, userData.profilePicturePath || '../images/default-avatar.webp')
+                .replace(/{{firstName}}/g, userData.firstName)
+                .replace(/{{lastName}}/g, userData.lastName)
+                .replace(/{{username}}/g, userData.username)
+                .replace(/{{description}}/g, userData.description || 'Este usuario aún no ha añadido una descripción.')
+                .replace(/{{createdAt}}/g, joinDate);
+
+            // 4. Renderizar el HTML poblado y actualizar el título.
+            appRoot.innerHTML = profileHtml;
+            document.title = `Perfil de ${userData.username}`;
+            templatePath = ''; // Se vacía para que no se renderice de nuevo más abajo.
+
+        } catch (error) {
+            console.error('Error al renderizar el perfil de usuario:', error);
+            appRoot.innerHTML = await fetchTemplate('./templates/error-404.html');
+            document.title = 'ERROR 404';
+        }
+    
     } else if (path.startsWith('/profile')) {
-        // --- Lógica de renderizado para la vista de perfil (ruta dinámica y privada) ---
+        // --- Lógica de renderizado para la vista de perfil del propio usuario (ruta privada) ---
         try {
             // Se solicita al servidor los datos del perfil del usuario autenticado.
             const response = await fetch('/api/profile');
             if (!response.ok) {
                 // Si el usuario no está autenticado (401), se le redirige a la página de login.
                 if (response.status === 401) {
-                    // Cambia la URL y renderiza la página de login sin recargar.
                     window.history.pushState({}, '', '/login');
-                    await renderPage('/login');
+                    await renderPage('/login'); // Llama recursivamente a renderPage para mostrar la vista de login.
                     return; // Detiene la ejecución para evitar más renderizados.
                 }
                 throw new Error('Error al obtener los datos del perfil.');
@@ -316,14 +373,10 @@ async function renderPage(path) {
             const userData = await response.json();
             const profileHtml = await fetchTemplate('./templates/profile.html');
             
-            // Inyecta el HTML de la plantilla en el contenedor principal antes de manipularlo.
             appRoot.innerHTML = profileHtml;
 
-            // Formatea la fecha de creación del usuario para mostrarla en un formato legible.
             const joinDate = new Date(userData.createdAt).toLocaleDateString('es-ES', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
+                year: 'numeric', month: 'long', day: 'numeric'
             });
             
             // Se utilizan selectores de clase y 'textContent' para poblar los datos de forma segura,
@@ -346,9 +399,9 @@ async function renderPage(path) {
             const joinDateEl = appRoot.querySelector('.profile-meta span');
             if (joinDateEl) joinDateEl.textContent = `Miembro desde: ${joinDate}`;
 
-            document.title = userData.username; // Actualiza el título de la página con el nombre de usuario.
+            document.title = userData.username; // Actualiza el título de la página.
             
-            templatePath = ''; // Se limpia la ruta para que el renderizador principal no la procese de nuevo.
+            templatePath = ''; // Se limpia la ruta para que no se procese de nuevo.
             await loadAndExecuteScript('./templates/profile.html'); // Se carga el script asociado a la vista de perfil.
 
         } catch (error) {
