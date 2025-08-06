@@ -54,6 +54,7 @@ app.use(helmet());
 
 // Middleware para parsear el cuerpo de las peticiones con formato JSON.
 app.use(express.json());
+
 // Middleware para servir archivos estáticos (imágenes de perfil subidas).
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
@@ -427,6 +428,11 @@ app.post('/logout', (req, res) => {
     });
 });
 
+
+// =================================================================
+//  API ROUTES
+// =================================================================
+
 /**
  * @route   GET /api/profile
  * @description Obtiene los datos del perfil del usuario autenticado.
@@ -459,6 +465,47 @@ app.get('/api/profile', async (req, res) => {
     } catch (error) {
         console.error('Error al obtener el perfil del usuario:', error);
         res.status(500).json({ message: 'Error en el servidor.' });
+    }
+});
+
+/**
+ * @route   GET /api/messages
+ * @description Obtiene una lista paginada de mensajes activos.
+ * @access  Public
+ * @param {number} req.query.page - El número de página a obtener (por defecto 1).
+ * @param {number} req.query.limit - El número de mensajes por página (por defecto 10).
+ * @returns {object} 200 - Un objeto con los mensajes y la información de paginación.
+ * @returns {object} 500 - Error interno del servidor.
+ */
+app.get('/api/messages', async (req, res) => {
+    try {
+        // --- Paginación ---
+        const page = parseInt(req.query.page, 10) || 1;
+        const limit = parseInt(req.query.limit, 10) || 10;
+        const skip = (page - 1) * limit;
+
+        // --- Consulta a la Base de Datos ---
+        const messages = await Message.find({ messageStatus: 'active' })
+            .sort({ createdAt: -1 }) // Usa el índice compuesto que definimos para máxima eficiencia.
+            .skip(skip)
+            .limit(limit)
+            // 'populate' reemplaza el 'sender' (que es un ObjectId) con los datos del usuario correspondiente.
+            // Seleccionamos solo los campos que necesitamos para no exponer datos innecesarios.
+            .populate('sender', 'username profilePicturePath') 
+            .lean(); // .lean() devuelve objetos JS planos en lugar de documentos Mongoose completos para mayor rendimiento.
+
+        // Contar el número total de documentos para calcular el total de páginas.
+        const totalMessages = await Message.countDocuments({ messageStatus: 'active' });
+
+        res.status(200).json({
+            messages,
+            totalPages: Math.ceil(totalMessages / limit),
+            currentPage: page
+        });
+
+    } catch (error) {
+        console.error('Error en GET /api/messages:', error);
+        res.status(500).json({ message: 'Error en el servidor al obtener los mensajes.' });
     }
 });
 

@@ -5,9 +5,59 @@
  * y la ejecución de los scripts asociados a cada vista.
  */
 
+
+// ===================================
+//  ELEMENTOS PRINCIPALES DEL DOM
+// ===================================
+
 // Elementos principales del DOM para la renderización de vistas.
 const appRoot = document.getElementById('app-root');
 const loaderContainer = document.getElementById('loader-container');
+
+
+// ===================================
+//  FUNCIONES DE AYUDA (HELPERS)
+// ===================================
+
+/**
+ * Crea y devuelve el elemento HTML para una única tarjeta de mensaje.
+ * @param {object} message - El objeto del mensaje con datos del sender populados.
+ * @returns {HTMLElement} El elemento del DOM para la tarjeta del mensaje.
+ */
+function createMessageCard(message) {
+    const card = document.createElement('div');
+    card.className = 'message-card';
+
+    // Utiliza textContent para prevenir inyección de HTML (XSS)
+    const authorUsername = message.sender ? message.sender.username : 'Usuario Desconocido';
+    const authorAvatar = message.sender ? message.sender.profilePicturePath : 'images/default-avatar.webp';
+
+    // El virtual 'likeCount' que creamos en Mongoose está disponible aquí
+    const likeCount = message.likeCount !== undefined ? message.likeCount : (message.likes ? message.likes.length : 0);
+
+    card.innerHTML = `
+        <div class="card-header">
+            <div class="author-info">
+                <img src="${authorAvatar}" alt="Avatar de ${authorUsername}" class="author-avatar">
+                <span class="author-username">@${authorUsername}</span>
+            </div>
+            <div class="likes-info">
+                <span>${likeCount}</span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>
+            </div>
+        </div>
+        <div class="card-body">
+            <h2 class="message-title">${message.title}</h2>
+            <p class="message-content">${message.content}</p>
+        </div>
+    `;
+    return card;
+}
+
+
+// ===================================
+//  LÓGICA PRINCIPAL DE LA APLICACIÓN
+// ===================================
 
 /**
  * Carga y ejecuta dinámicamente el script asociado a una plantilla específica.
@@ -93,8 +143,68 @@ async function renderPage(path) {
     
     // --- Lógica de Enrutamiento ---
     if (path === '/' || path === '/home') {
-        templatePath = './templates/home.html';
+        appRoot.innerHTML = await fetchTemplate('./templates/home.html');
         document.title = 'Inicio';
+
+        const messagesContainer = document.getElementById('messages-container');
+        const loadMoreBtn = document.getElementById('load-more-btn');
+        const feedLoader = document.getElementById('feed-loader');
+        let currentPage = 1;
+        let totalPages = 1;
+
+        const loadMessages = async () => {
+            if (currentPage > totalPages) return; // No hacer nada si ya se cargaron todas las páginas
+
+            loadMoreBtn.classList.add('hidden');
+            feedLoader.classList.remove('hidden');
+
+            try {
+                const response = await fetch(`/api/messages?page=${currentPage}`);
+                if (!response.ok) throw new Error('Error al cargar los mensajes.');
+
+                const data = await response.json();
+                
+                // Si es la primera página y no vienen mensajes, muestra un mensaje especial.
+                if (currentPage === 1 && data.messages.length === 0) {
+                    messagesContainer.innerHTML = `
+                        <div class="empty-feed-message">
+                            <br>
+                            <p>Aún no hay mensajes publicados. ¡Sé el primero en compartir tus ideas!</p>
+                            <br>
+                        </div>
+                    `;
+                    feedLoader.classList.add('hidden'); // Ocultar el loader ya que no hay nada más que cargar.
+                    return; // Detener la ejecución de la función aquí.
+                }
+
+                data.messages.forEach(message => {
+                    const messageCard = createMessageCard(message);
+                    messagesContainer.appendChild(messageCard);
+                });
+
+                totalPages = data.totalPages;
+                currentPage++;
+
+                // Mostrar el botón "Cargar más" solo si hay más páginas por cargar
+                if (currentPage <= totalPages) {
+                    loadMoreBtn.classList.remove('hidden');
+                }
+
+            } catch (error) {
+                console.error(error);
+                messagesContainer.innerHTML = '<p class="error-text">No se pudieron cargar los mensajes. Inténtalo de nuevo más tarde.</p>';
+            } finally {
+                feedLoader.classList.add('hidden');
+            }
+        };
+
+        // Cargar la primera página de mensajes al entrar en Home
+        await loadMessages();
+
+        // Añadir el listener al botón "Cargar más"
+        loadMoreBtn.addEventListener('click', loadMessages);
+
+        templatePath = '';
     } else if (path === '/about' || path === '/about-AgoraDig' || path === '/about-us') {
         templatePath = './templates/about.html';
         document.title = 'Acerca';
