@@ -101,7 +101,6 @@
     text-align: center;
     padding: 2rem 1rem;
     background-color: var(--color-fondo-tarjeta);
-    border: 1px dashed var(--color-borde); /* Un borde discontinuo sugiere un estado "vacío" o de "placeholder". */
     border-radius: 8px;
 }
 
