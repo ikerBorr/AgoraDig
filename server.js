@@ -497,6 +497,83 @@ app.get('/api/profile', async (req, res) => {
 });
 
 /**
+ * @route   PATCH /api/profile
+ * @description Actualiza el nombre de usuario y/o la descripción del usuario autenticado.
+ * @access  Private (requiere estar autenticado)
+ * @param {string} [req.body.username] - El nuevo nombre de usuario.
+ * @param {string} [req.body.description] - La nueva descripción.
+ * @returns {object} 200 - Objeto con un mensaje de éxito y los datos actualizados del usuario.
+ * @returns {object} 400 - Error de validación o si no se proporcionaron datos.
+ * @returns {object} 401 - Si el usuario no está autenticado.
+ * @returns {object} 409 - Si el nombre de usuario ya está en uso.
+ * @returns {object} 500 - Error interno del servidor.
+ */
+app.patch('/api/profile', isAuthenticated, async (req, res) => {
+    try {
+        const { username, description } = req.body;
+        const userId = req.session.userId;
+
+        // --- Validaciones ---
+        if (!username && description === undefined) {
+            return res.status(400).json({ message: 'No se proporcionaron datos para actualizar.' });
+        }
+        
+        const errors = {};
+        if (username && (username.length < 3 || username.length > 20)) {
+            errors.username = 'El nombre de usuario debe tener entre 3 y 20 caracteres.';
+        }
+        if (description && description.length > 300) {
+            errors.description = 'La descripción no puede exceder los 300 caracteres.';
+        }
+
+        if (Object.keys(errors).length > 0) {
+            return res.status(400).json({ errors });
+        }
+
+        // Si se está actualizando el username, verificar que no esté ya en uso por OTRO usuario.
+        if (username) {
+            const existingUser = await User.findOne({ username: username, _id: { $ne: userId } });
+            if (existingUser) {
+                return res.status(409).json({ errors: { username: 'Este nombre de usuario ya está en uso.' } });
+            }
+        }
+        
+        // Construir el objeto de actualización solo con los campos proporcionados.
+        const updateData = {};
+        if (username) updateData.username = username;
+        if (description !== undefined) updateData.description = description;
+
+        // Buscar y actualizar el usuario. { new: true } devuelve el documento modificado.
+        const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            { $set: updateData },
+            { new: true, runValidators: true }
+        ).select('firstName lastName username email description profilePicturePath role createdAt');
+
+        if (!updatedUser) {
+            return res.status(404).json({ message: 'Usuario no encontrado.' });
+        }
+
+        res.status(200).json({
+            message: 'Perfil actualizado con éxito.',
+            user: updatedUser
+        });
+
+    } catch (error) {
+        console.error('Error en PATCH /api/profile:', error);
+        // Manejo de errores de validación de Mongoose que no fueron capturados antes.
+        if (error.name === 'ValidationError') {
+            const validationErrors = {};
+            for (let field in error.errors) {
+                validationErrors[field] = error.errors[field].message;
+            }
+            return res.status(400).json({ errors: validationErrors });
+        }
+        res.status(500).json({ message: 'Error en el servidor al actualizar el perfil.' });
+    }
+});
+
+/**
  * @route   GET /api/messages
  * @description Obtiene una lista paginada de mensajes activos.
  * @access  Public

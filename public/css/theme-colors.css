@@ -18,6 +18,16 @@
   --color-fondo-input:        hsl(var(--tono-neutro), var(--saturacion-neutra), 100%);
   --color-texto-input:        hsl(var(--tono-neutro), var(--saturacion-neutra), 15%);
 
+  /* Colores para Botones */
+  --color-boton-primario-fondo:         hsl(var(--tono-primario), var(--saturacion-primaria), 45%);
+  --color-boton-primario-texto:         hsl(var(--tono-neutro), 0%, 100%);
+  --color-boton-primario-fondo-hover:   hsl(var(--tono-primario), var(--saturacion-primaria), 55%);
+  
+  --color-boton-secundario-fondo:       transparent;
+  --color-boton-secundario-texto:       hsl(var(--tono-primario), var(--saturacion-primaria), 40%);
+  --color-boton-secundario-borde:       hsl(var(--tono-primario), var(--saturacion-primaria), 45%);
+  --color-boton-secundario-fondo-hover: hsla(var(--tono-primario), var(--saturacion-primaria), 50%, 0.1);
+
   /* Color para like */
   --color-like:               hsl(0, 85%, 55%);
 }
@@ -33,6 +43,16 @@ body.night-mode, body.dark-mode { /* Se añade .dark-mode para compatibilidad */
   /* Colores para Formularios */
   --color-fondo-input:        rgb(45, 45, 45);
   --color-texto-input:        rgb(230, 230, 230);
+
+  /* Colores para Botones */
+  --color-boton-primario-fondo:         hsl(var(--tono-primario), var(--saturacion-primaria), 65%);
+  --color-boton-primario-texto:         hsl(var(--tono-primario), 20%, 10%);
+  --color-boton-primario-fondo-hover:   hsl(var(--tono-primario), var(--saturacion-primaria), 70%);
+
+  --color-boton-secundario-fondo:       transparent;
+  --color-boton-secundario-texto:       hsl(var(--tono-primario), var(--saturacion-primaria), 70%);
+  --color-boton-secundario-borde:       hsl(var(--tono-primario), var(--saturacion-primaria), 65%);
+  --color-boton-secundario-fondo-hover: hsla(var(--tono-primario), var(--saturacion-primaria), 70%, 0.15);
 
   /* Color para like */
   --color-like:               hsl(0, 85%, 65%);
@@ -89,10 +109,7 @@ body.night-mode .icon-sun {
     display: none;
 }
 
-
-
-/* nav */
-
+/*--- Icons Menu ---*/
 #theme-toggle, .menu-toggle {
     background: none;
     border: none;
@@ -109,4 +126,23 @@ body.night-mode .icon-sun {
 
 #theme-toggle:hover svg, .menu-toggle:hover svg {
     stroke: var(--color-enlace);
+}
+
+
+/* --- Botón de Solo Icono --- */
+/* Ideal para botones de menú, editar, etc. */
+.button--icon {
+  background-color: transparent;
+  border-color: transparent;
+  padding: 0.5rem;
+  color: var(--color-texto-secundario);
+}
+
+.button--icon:hover {
+  background-color: hsla(var(--tono-neutro), var(--saturacion-neutra), 50%, 0.1);
+  color: var(--color-enlace);
+}
+
+.button--icon svg {
+  stroke: currentColor; /* El icono hereda el color del texto del botón */
 }

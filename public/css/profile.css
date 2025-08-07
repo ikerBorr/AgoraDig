@@ -133,3 +133,117 @@
   /* Esto asegura que si se cambia el color del texto del botón, el icono se actualizará automáticamente */
   stroke: currentColor; 
 }
+
+/* =================================================================
+   ESTILOS PARA EL MODAL DE EDICIÓN DE PERFIL (CORREGIDO)
+   ================================================================= */
+
+.profile-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7); /* Mantenemos un negro semitransparente para el overlay */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.profile-modal-overlay.hidden {
+    opacity: 0;
+    visibility: hidden;
+}
+
+.profile-modal-content {
+    background-color: var(--color-fondo); /* CORREGIDO: Usa la variable de fondo principal del tema. */
+    padding: 2rem 2.5rem;
+    border-radius: 8px;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.25);
+    position: relative;
+    width: 90%;
+    max-width: 500px;
+    transform: scale(1);
+    transition: transform 0.3s ease;
+}
+
+.profile-modal-overlay.hidden .profile-modal-content {
+    transform: scale(0.9);
+}
+
+.profile-modal-close-button {
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    background: none;
+    border: none;
+    font-size: 2rem;
+    color: var(--color-texto-secundario); /* CORREGIDO: Usa la variable de texto secundario. */
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+}
+
+.profile-modal-close-button:hover {
+    color: var(--color-texto); /* CORREGIDO: Usa la variable de texto principal. */
+}
+
+.profile-modal-content h2 {
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+    color: var(--color-texto); /* CORREGIDO: Usa la variable de texto principal. */
+}
+
+.profile-modal-form-group {
+    margin-bottom: 1rem;
+    text-align: left;
+}
+
+.profile-modal-form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: bold;
+    color: var(--color-texto-secundario); /* CORREGIDO: Usa la variable de texto secundario. */
+}
+
+.profile-modal-form-group input[type="text"],
+.profile-modal-form-group textarea {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--color-borde); /* CORREGIDO: Usa la variable de borde. */
+    border-radius: 4px;
+    background-color: var(--color-fondo-input); /* CORREGIDO: Usa la variable de fondo para inputs. */
+    color: var(--color-texto-input); /* CORREGIDO: Usa la variable de texto para inputs. */
+    font-size: 1rem;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* AÑADIDO: Estilo de foco consistente con otros modales */
+.profile-modal-form-group input[type="text"]:focus,
+.profile-modal-form-group textarea:focus {
+    outline: none;
+    border-color: var(--color-enlace);
+    box-shadow: 0 0 0 3px var(--color-foco-primario);
+}
+
+
+.profile-modal-form-group textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+
+.profile-modal-error-text {
+    color: #e74c3c; /* Mantenemos un color de error explícito consistente con messages.css */
+    margin-top: 1rem;
+    text-align: center;
+    font-weight: bold;
+}
+
+.profile-modal-error-text:not(.hidden) {
+    display: block;
+}

@@ -1,14 +1,18 @@
 <section id="user-profile" class="center center-text">
     <div class="profile-card">
         <img src="{{profilePicturePath}}" alt="Foto de perfil de {{username}}" class="profile-picture">
-        
-        <h1 class="profile-fullname">{{firstName}} {{lastName}}</h1>
-        <p class="profile-username">@{{username}}</p>
-        
-        <p class="profile-description">
-            {{description}}
-        </p>
 
+        <div id="display-info">
+            <div class="profile-header">
+                <h1 class="profile-fullname">{{firstName}} {{lastName}}</h1>
+                <button id="edit-profile-button" class="button button--icon" title="Editar Perfil">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                </button>
+            </div>
+            <p class="profile-username">@{{username}}</p>
+            <p class="profile-description">{{description}}</p>
+        </div>
+        
         <div class="profile-meta">
             <span>Miembro desde: {{createdAt}}</span>
         </div>
@@ -18,5 +22,24 @@
             <span>Salir</span>
         </button>
         <p id="logout-message" class="message-info"></p>
+    </div>
+
+    <div id="edit-profile-modal" class="profile-modal-overlay hidden">
+        <div class="profile-modal-content">
+            <button id="close-edit-modal-btn" class="profile-modal-close-button" title="Cerrar">&times;</button>
+            <h2>Editar Perfil</h2>
+            <form id="edit-profile-form">
+                <div class="profile-modal-form-group">
+                    <label for="username-edit">Nombre de Usuario</label>
+                    <input type="text" id="username-edit" name="username" required maxlength="20">
+                </div>
+                <div class="profile-modal-form-group">
+                    <label for="description-edit">Descripción</label>
+                    <textarea id="description-edit" name="description" rows="5" maxlength="300"></textarea>
+                </div>
+                <div id="modal-edit-error" class="profile-modal-error-text hidden"></div>
+                <button type="submit" class="button button--primary">Guardar Cambios</button>
+            </form>
+        </div>
     </div>
 </section>
