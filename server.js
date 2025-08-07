@@ -59,7 +59,7 @@ app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Configuración de la sesión de usuario
-const mongoUrl = 'mongodb://localhost:27017/AgoraDig_BD';
+const mongoUrl = process.env.MONGODB_URI || 'mongodb://localhost:27017/AgoraDig_BD';
 app.use(session({
     secret: process.env.SESSION_SECRET,      // Secreto utilizado para firmar la cookie de sesión, cargado desde variables de entorno.
     resave: false,                           // No volver a guardar la sesión si no ha cambiado.
