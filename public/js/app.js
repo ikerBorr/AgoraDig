@@ -27,18 +27,19 @@ const loaderContainer = document.getElementById('loader-container');
 function createMessageCard(message) {
     const card = document.createElement('div');
     card.className = 'message-card';
+    card.setAttribute('data-message-id', message._id); // Atributo para identificar la tarjeta
 
-    // Se comprueba la existencia del sender para evitar errores si el usuario ha sido eliminado.
     const author = message.sender || { username: 'Usuario Eliminado', profilePicturePath: '../images/default-avatar.webp', _id: null };
     
-    // Se extraen los datos del autor para mejorar la legibilidad de la plantilla HTML.
     const authorId = author._id;
     const authorUsername = author.username;
     const authorAvatar = author.profilePicturePath;
 
     const likeCount = message.likeCount !== undefined ? message.likeCount : (message.likes ? message.likes.length : 0);
+    
+    // Si message.isLiked es true, se añade la clase 'liked', si no, se añade una cadena vacía.
+    const likedClass = message.isLiked ? 'liked' : '';
 
-    // Se unifica la lógica en una sola plantilla de cadena.
     card.innerHTML = `
         <div class="card-header">
             <div class="author-info">
@@ -50,8 +51,8 @@ function createMessageCard(message) {
                 }
             </div>
             <div class="likes-info">
-                <span>${likeCount}</span>
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>
+                <span class="like-count">${likeCount}</span>
+                <svg class="like-button ${likedClass}" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>
             </div>
         </div>
         <div class="card-body">
@@ -154,53 +155,41 @@ async function renderPage(path) {
         appRoot.innerHTML = await fetchTemplate('./templates/home.html');
         document.title = 'Inicio';
 
-        // --- LÓGICA PARA CARGAR EL FEED DE MENSAJES ---
         const messagesContainer = document.getElementById('messages-container');
         const loadMoreBtn = document.getElementById('load-more-btn');
         const feedLoader = document.getElementById('feed-loader');
         let currentPage = 1;
         let totalPages = 1;
+        let pollInterval; // Variable para guardar la referencia al intervalo
 
-        /**
-         * @description Función asíncrona para cargar mensajes de la API de forma paginada.
-         * Gestiona el estado de los loaders y del botón "Cargar más".
-         * @returns {Promise<void>}
-         */
+        // Limpiar intervalo anterior si existe (al navegar de vuelta a home)
+        if (window.pollInterval) {
+            clearInterval(window.pollInterval);
+        }
+
         const loadMessages = async () => {
-            if (currentPage > totalPages) return; // Detener si ya se cargaron todas las páginas.
-
+            if (currentPage > totalPages) return;
             loadMoreBtn.classList.add('hidden');
             feedLoader.classList.remove('hidden');
-
             try {
                 const response = await fetch(`/api/messages?page=${currentPage}`);
                 if (!response.ok) throw new Error('Error al cargar los mensajes.');
-
                 const data = await response.json();
                 
-                // Caso especial: si es la primera página y no hay mensajes, mostrar un mensaje de bienvenida.
                 if (currentPage === 1 && data.messages.length === 0) {
-                    messagesContainer.innerHTML = `
-                        <div class="empty-feed-message">
-                            <br>
-                            <p>Aún no hay mensajes publicados. ¡Sé el primero en compartir tus ideas!</p>
-                            <br>
-                        </div>
-                    `;
+                    messagesContainer.innerHTML = `<div class="empty-feed-message"><br><p>Aún no hay mensajes publicados. ¡Sé el primero en compartir tus ideas!</p><br></div>`;
                     feedLoader.classList.add('hidden');
                     return; 
                 }
 
-                // Itera sobre los mensajes recibidos y los añade al contenedor.
                 data.messages.forEach(message => {
                     const messageCard = createMessageCard(message);
                     messagesContainer.appendChild(messageCard);
                 });
 
                 totalPages = data.totalPages;
-                currentPage++; // Incrementar el contador de página para la siguiente petición.
+                currentPage++;
 
-                // Mostrar el botón "Cargar más" solo si quedan páginas por cargar.
                 if (currentPage <= totalPages) {
                     loadMoreBtn.classList.remove('hidden');
                 }
@@ -209,16 +198,83 @@ async function renderPage(path) {
                 console.error(error);
                 messagesContainer.innerHTML = '<p class="error-text">No se pudieron cargar los mensajes. Inténtalo de nuevo más tarde.</p>';
             } finally {
-                // Asegurarse de ocultar el loader al finalizar, tanto en caso de éxito como de error.
                 feedLoader.classList.add('hidden');
             }
         };
 
-        // Carga inicial de mensajes al renderizar la página de inicio.
         await loadMessages();
-
-        // Asigna el evento al botón para cargar las páginas siguientes.
         loadMoreBtn.addEventListener('click', loadMessages);
+        
+        // --- LÓGICA DE LIKES ---
+        const handleLikeClick = async (event) => {
+            const likeButton = event.target.closest('.like-button');
+            if (!likeButton) return; // Si no se hizo clic en el botón, no hacer nada
+
+            const card = likeButton.closest('.message-card');
+            const messageId = card.getAttribute('data-message-id');
+
+            try {
+                const response = await fetch(`/api/messages/${messageId}/like`, {
+                    method: 'POST'
+                });
+
+                if (response.status === 401) {
+                    // Usuario no logueado, se ignora la pulsación silenciosamente
+                    console.log("Usuario no autenticado. El like fue ignorado.");
+                    return;
+                }
+                if (!response.ok) {
+                    throw new Error('Error del servidor al procesar el like.');
+                }
+                
+                const data = await response.json();
+
+                // Actualización optimista de la UI
+                const likeCountSpan = card.querySelector('.like-count');
+                likeCountSpan.textContent = data.likeCount;
+                
+                if (data.isLiked) {
+                    likeButton.classList.add('liked');
+                } else {
+                    likeButton.classList.remove('liked');
+                }
+
+            } catch (error) {
+                console.error(error.message);
+            }
+        };
+
+        messagesContainer.addEventListener('click', handleLikeClick);
+        
+        // --- LÓGICA DE POLLING CADA 5 SEGUNDOS ---
+        const updateAllLikeCounts = async () => {
+            const cards = messagesContainer.querySelectorAll('.message-card');
+            if (cards.length === 0) return;
+
+            const messageIds = Array.from(cards).map(card => card.getAttribute('data-message-id'));
+            
+            try {
+                const response = await fetch(`/api/messages/counts?ids=${messageIds.join(',')}`);
+                if (!response.ok) return;
+
+                const counts = await response.json();
+
+                for (const messageId in counts) {
+                    const card = messagesContainer.querySelector(`.message-card[data-message-id="${messageId}"]`);
+                    if (card) {
+                        const likeCountSpan = card.querySelector('.like-count');
+                        if (likeCountSpan.textContent !== String(counts[messageId])) {
+                            likeCountSpan.textContent = counts[messageId];
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error durante el sondeo de likes:', error);
+            }
+        };
+
+        // Iniciar el sondeo y guardarlo en una variable global para poder limpiarlo
+        window.pollInterval = setInterval(updateAllLikeCounts, 5000);
 
         // --- LÓGICA PARA EL MODAL DE CREACIÓN DE MENSAJES ---
         const openModalBtn = document.getElementById('open-create-message-modal-btn');
@@ -227,30 +283,24 @@ async function renderPage(path) {
         const messageForm = document.getElementById('create-message-form');
         const modalError = document.getElementById('modal-error-message');
 
-        /** @description Muestra el overlay del modal. */
         const showModal = () => modalOverlay.classList.remove('hidden');
-        
-        /** @description Oculta el modal, resetea el formulario y limpia los mensajes de error. */
         const hideModal = () => {
             modalOverlay.classList.add('hidden');
-            modalError.classList.add('hidden'); // Oculta errores al cerrar.
-            messageForm.reset(); // Limpia el formulario para la próxima vez que se abra.
+            modalError.classList.add('hidden');
+            messageForm.reset();
         };
         
-        // Listeners para abrir y cerrar el modal.
         openModalBtn.addEventListener('click', showModal);
         closeModalBtn.addEventListener('click', hideModal);
         modalOverlay.addEventListener('click', (e) => {
-            // Cierra el modal solo si se hace clic en el fondo gris (el overlay mismo).
             if (e.target === modalOverlay) {
                 hideModal();
             }
         });
 
-        // Listener para gestionar el envío del formulario de nuevo mensaje.
         messageForm.addEventListener('submit', async (e) => {
-            e.preventDefault(); // Evita la recarga de la página.
-            modalError.classList.add('hidden'); // Ocultar errores previos.
+            e.preventDefault();
+            modalError.classList.add('hidden');
             
             const formData = new FormData(messageForm);
             const data = Object.fromEntries(formData.entries());
@@ -261,36 +311,25 @@ async function renderPage(path) {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
                 });
-
                 const responseData = await response.json();
-
                 if (!response.ok) {
-                    // Si la respuesta no es exitosa, se lanza un error con el mensaje del servidor.
                     throw new Error(responseData.message || 'Error desconocido al publicar.');
                 }
-
-                // Éxito: el servidor devuelve el nuevo post creado.
                 const newPost = responseData;
                 const newCard = createMessageCard(newPost);
                 
                 const emptyMessage = messagesContainer.querySelector('.empty-feed-message');
                 if (emptyMessage) {
-                    // Si el mensaje de "no hay posts" está visible, se elimina.
                     messagesContainer.innerHTML = '';
                 }
-
-                // Añade la nueva tarjeta al principio del feed para una actualización visual inmediata (UI optimista).
                 messagesContainer.prepend(newCard); 
-                hideModal(); // Cierra y resetea el modal.
-
+                hideModal();
             } catch (error) {
-                // Muestra el mensaje de error devuelto por la API en el modal.
                 modalError.textContent = error.message;
                 modalError.classList.remove('hidden');
             }
         });
 
-        // Se vacía templatePath porque el renderizado de la home es dinámico y ya se ha completado.
         templatePath = '';
 
     } else if (path === '/about' || path === '/about-AgoraDig' || path === '/about-us') {

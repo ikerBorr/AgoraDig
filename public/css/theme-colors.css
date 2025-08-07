@@ -17,6 +17,9 @@
   /* Colores para Formularios */
   --color-fondo-input:        hsl(var(--tono-neutro), var(--saturacion-neutra), 100%);
   --color-texto-input:        hsl(var(--tono-neutro), var(--saturacion-neutra), 15%);
+
+  /* Color para like */
+  --color-like:               hsl(0, 85%, 55%);
 }
 
 /* Night mode */
@@ -30,6 +33,9 @@ body.night-mode, body.dark-mode { /* Se añade .dark-mode para compatibilidad */
   /* Colores para Formularios */
   --color-fondo-input:        rgb(45, 45, 45);
   --color-texto-input:        rgb(230, 230, 230);
+
+  /* Color para like */
+  --color-like:               hsl(0, 85%, 65%);
 }
 
 

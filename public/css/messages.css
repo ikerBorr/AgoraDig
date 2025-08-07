@@ -227,3 +227,13 @@
     font-weight: bold;
     color: #e74c3c; /* Un color rojo universalmente reconocido para errores. */
 }
+
+/* --- Botón de "Me gusta" --- */
+.like-button {
+    cursor: pointer;
+    transition: fill 0.2s ease, stroke 0.2s ease;
+}
+
+.like-button.liked {
+    fill: var(--color-like);
+}

@@ -513,16 +513,25 @@ app.get('/api/messages', async (req, res) => {
         const skip = (page - 1) * limit;
 
         // --- Consulta a la Base de Datos ---
-        const messages = await Message.find({ messageStatus: 'active' })
-            .sort({ createdAt: -1 }) // Usa el índice compuesto que definimos para máxima eficiencia.
+        let messages = await Message.find({ messageStatus: 'active' })
+            .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit)
-            // 'populate' reemplaza el 'sender' (que es un ObjectId) con los datos del usuario correspondiente.
-            // Seleccionamos solo los campos que necesitamos para no exponer datos innecesarios.
             .populate('sender', 'username profilePicturePath') 
-            .lean(); // .lean() devuelve objetos JS planos en lugar de documentos Mongoose completos para mayor rendimiento.
+            .lean(); // .lean() es importante para poder modificar los objetos después
 
-        // Contar el número total de documentos para calcular el total de páginas.
+        // Si hay un usuario logueado, procesamos los mensajes para añadir el estado del like.
+        if (req.session.userId) {
+            const userId = req.session.userId;
+            messages = messages.map(message => {
+                // Comprobamos si el array de likes (que contiene ObjectIds) incluye el ID del usuario.
+                // Usamos .toString() para una comparación segura de los ObjectIds.
+                const isLiked = message.likes.some(like => like.toString() === userId.toString());
+                return { ...message, isLiked }; // Añadimos la nueva propiedad 'isLiked'
+            });
+        }
+        // Si no hay usuario logueado, los mensajes se envían sin la propiedad 'isLiked' (o será undefined).
+
         const totalMessages = await Message.countDocuments({ messageStatus: 'active' });
 
         res.status(200).json({
@@ -601,6 +610,93 @@ app.post('/api/messages', isAuthenticated, async (req, res) => {
     } catch (error) {
         console.error('Error en POST /api/messages:', error);
         res.status(500).json({ message: 'Error en el servidor al crear el mensaje.' });
+    }
+});
+
+/**
+ * @route   POST /api/messages/:id/like
+ * @description Añade o quita un "like" de un usuario a un mensaje.
+ * @access  Private (requiere estar autenticado)
+ * @param {string} req.params.id - El ID del mensaje.
+ * @returns {object} 200 - Objeto con el nuevo contador de likes y el estado actual del like del usuario.
+ * @returns {object} 401 - Si el usuario no está autenticado.
+ * @returns {object} 404 - Si el mensaje no se encuentra.
+ * @returns {object} 500 - Error interno del servidor.
+ */
+app.post('/api/messages/:id/like', isAuthenticated, async (req, res) => {
+    try {
+        const messageId = req.params.id;
+        const userId = req.session.userId;
+
+        const message = await Message.findById(messageId);
+
+        if (!message) {
+            return res.status(404).json({ message: 'Mensaje no encontrado.' });
+        }
+
+        // Comprueba si el usuario ya ha dado like. `some` es más eficiente que `includes` con ObjectIds.
+        const hasLiked = message.likes.some(like => like.equals(userId));
+        let updatedMessage;
+
+        if (hasLiked) {
+            // Si ya le ha dado like, se lo quitamos (unlike)
+            updatedMessage = await Message.findByIdAndUpdate(
+                messageId,
+                { $pull: { likes: userId } }, // $pull quita un elemento de un array
+                { new: true } // Devuelve el documento actualizado
+            );
+        } else {
+            // Si no le ha dado like, se lo añadimos
+            updatedMessage = await Message.findByIdAndUpdate(
+                messageId,
+                { $addToSet: { likes: userId } }, // $addToSet añade el elemento solo si no existe, evitando duplicados
+                { new: true }
+            );
+        }
+        
+        res.status(200).json({
+            likeCount: updatedMessage.likeCount,
+            isLiked: !hasLiked // Devuelve el nuevo estado del like
+        });
+
+    } catch (error) {
+        console.error('Error en POST /api/messages/:id/like:', error);
+        res.status(500).json({ message: 'Error en el servidor al procesar el like.' });
+    }
+});
+
+/**
+ * @route   GET /api/messages/counts
+ * @description Obtiene los contadores de likes actualizados para una lista de mensajes.
+ * @access  Public
+ * @param {string} req.query.ids - Una cadena de IDs de mensajes separados por coma.
+ * @returns {object} 200 - Un objeto mapeando cada ID de mensaje a su contador de likes.
+ * @returns {object} 400 - Si no se proporcionan IDs.
+ * @returns {object} 500 - Error interno del servidor.
+ */
+app.get('/api/messages/counts', async (req, res) => {
+    try {
+        const { ids } = req.query;
+        if (!ids) {
+            return res.status(400).json({ message: 'No se proporcionaron IDs de mensajes.' });
+        }
+
+        const messageIds = ids.split(',');
+        
+        const messages = await Message.find({
+            '_id': { $in: messageIds }
+        }).select('_id likes'); // Solo seleccionamos los campos necesarios
+
+        const counts = messages.reduce((acc, msg) => {
+            acc[msg._id] = msg.likeCount;
+            return acc;
+        }, {});
+
+        res.status(200).json(counts);
+
+    } catch (error) {
+        console.error('Error en GET /api/messages/counts:', error);
+        res.status(500).json({ message: 'Error en el servidor al obtener los contadores.' });
     }
 });
 
