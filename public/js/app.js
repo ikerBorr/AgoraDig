@@ -509,17 +509,23 @@ async function handleNavClick(event) {
     event.preventDefault(); // Prevenir la navegación tradicional del navegador.
 
     const targetUrl = new URL(targetLink.href);
-    const targetPathname = targetUrl.pathname;
-    const targetHash = targetUrl.hash; // Captura el ancla (ej. "#home-feed")
+    
+    // Construye la ruta relativa que incluye los parámetros de búsqueda (ej. /view-profile?username=test)
+    const newRelativePath = targetUrl.pathname + targetUrl.search;
+    const currentRelativePath = window.location.pathname + window.location.search;
+    
+    // El ancla se gestiona por separado
+    const targetHash = targetUrl.hash;
 
-    // Si el destino es una ruta diferente, renderiza la nueva página.
-    if (window.location.pathname !== targetPathname) {
-        window.history.pushState({}, '', targetPathname);
-        await renderPage(targetPathname);
+    // Solo se navega si la ruta (path + search) es diferente, para permitir cambiar entre perfiles.
+    if (currentRelativePath !== newRelativePath) {
+        // Actualiza el historial del navegador con la ruta limpia (con parámetros pero sin ancla).
+        window.history.pushState({}, '', newRelativePath);
+        // Llama a renderizar la página con la nueva ruta.
+        await renderPage(newRelativePath);
 
         // Si la URL de destino tiene un ancla, desplazarse a ella después de renderizar.
         if (targetHash) {
-            // Se usa un pequeño retardo para asegurar que el DOM esté completamente actualizado.
             setTimeout(() => scrollToElement(targetHash), 100);
         }
     } else if (targetHash) {
