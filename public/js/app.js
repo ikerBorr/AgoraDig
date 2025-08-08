@@ -5,13 +5,14 @@
  * y la ejecución de los scripts asociados a cada vista.
  */
 
-
 // ===================================
 //  ELEMENTOS PRINCIPALES DEL DOM
 // ===================================
 
-// Elementos principales del DOM para la renderización de vistas.
+/** @type {HTMLElement} Contenedor principal donde se renderizan las vistas de la aplicación. */
 const appRoot = document.getElementById('app-root');
+
+/** @type {HTMLElement} Contenedor del indicador de carga, mostrado durante la navegación. */
 const loaderContainer = document.getElementById('loader-container');
 
 
@@ -21,23 +22,30 @@ const loaderContainer = document.getElementById('loader-container');
 
 /**
  * Crea y devuelve el elemento HTML para una única tarjeta de mensaje.
- * @param {object} message - El objeto del mensaje con datos del sender populados.
- * @returns {HTMLElement} El elemento del DOM para la tarjeta del mensaje.
+ * Esta función es un componente reutilizable para renderizar el feed.
+ * @param {object} message - El objeto del mensaje.
+ * @param {string} message._id - El ID único del mensaje.
+ * @param {string} message.title - El título del mensaje.
+ * @param {string} message.content - El contenido del mensaje.
+ * @param {number} message.likeCount - El número de 'likes' del mensaje.
+ * @param {boolean} message.isLiked - Indica si el usuario actual ha dado 'like' a este mensaje.
+ * @param {object} message.sender - El objeto del autor del mensaje.
+ * @param {string} [message.sender._id] - El ID del autor.
+ * @param {string} message.sender.username - El nombre de usuario del autor.
+ * @param {string} message.sender.profilePicturePath - La ruta a la imagen de perfil del autor.
+ * @returns {HTMLElement} El elemento del DOM (`div.message-card`) completamente construido.
  */
 function createMessageCard(message) {
     const card = document.createElement('div');
     card.className = 'message-card';
-    card.setAttribute('data-message-id', message._id); // Atributo para identificar la tarjeta
+    card.setAttribute('data-message-id', message._id);
 
+    // Proporciona un autor por defecto si el sender fue eliminado o es nulo.
     const author = message.sender || { username: 'Usuario Eliminado', profilePicturePath: '../images/default-avatar.webp', _id: null };
+    const { _id: authorId, username: authorUsername, profilePicturePath: authorAvatar } = author;
     
-    const authorId = author._id;
-    const authorUsername = author.username;
-    const authorAvatar = author.profilePicturePath;
-
+    // Calcula el número de likes, asegurando que siempre sea un número.
     const likeCount = message.likeCount !== undefined ? message.likeCount : (message.likes ? message.likes.length : 0);
-    
-    // Si message.isLiked es true, se añade la clase 'liked', si no, se añade una cadena vacía.
     const likedClass = message.isLiked ? 'liked' : '';
 
     card.innerHTML = `
@@ -64,51 +72,64 @@ function createMessageCard(message) {
     return card;
 }
 
+/**
+ * Se desplaza suavemente hasta un elemento del DOM basado en su selector.
+ * Útil para navegar a anclas internas (ej. #home-feed).
+ * @param {string} selector - Un selector CSS válido (ej. '#mi-id', '.mi-clase').
+ */
+function scrollToElement(selector) {
+    const element = document.querySelector(selector);
+    if (element) {
+        element.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+        });
+    }
+}
+
 
 // ===================================
-//  LÓGICA PRINCIPAL DE LA APLICACIÓN
+//  LÓGICA DE CARGA DE VISTAS
 // ===================================
 
 /**
- * Carga y ejecuta dinámicamente el script asociado a una plantilla específica.
- * Elimina el script de la vista anterior para evitar conflictos de variables o listeners.
+ * Carga y ejecuta dinámicamente un script asociado a una plantilla.
+ * Reemplaza el script de la vista anterior para evitar conflictos de listeners o estado.
+ * @async
  * @param {string} templatePath - La ruta de la plantilla que se ha cargado (ej. './templates/register.html').
- * @returns {Promise<void>} Una promesa que se resuelve una vez el script ha sido añadido al DOM.
+ * @returns {Promise<void>} Una promesa que se resuelve cuando el script ha sido añadido y cargado.
  */
 async function loadAndExecuteScript(templatePath) {
-    // Elimina el script de la vista anterior si existe para evitar duplicados o conflictos.
     const oldScript = document.getElementById('view-script');
     if (oldScript) {
         oldScript.remove();
     }
 
-    // Determina qué script cargar basado en la ruta de la plantilla.
-    let scriptSrc;
-    if (templatePath.includes('register.html')) {
-        scriptSrc = './js/register.js';
-    } else if (templatePath.includes('login.html')) {
-        scriptSrc = './js/login.js';
-    } else if (templatePath.includes('profile.html')) {
-        scriptSrc = './js/profile.js';
-    }
+    // Mapeo de plantillas a sus scripts correspondientes.
+    const scriptMap = {
+        './templates/register.html': './js/register.js',
+        './templates/login.html': './js/login.js',
+        './templates/profile.html': './js/profile.js',
+    };
 
-    // Si no hay un script específico para esta vista, no se realiza ninguna acción.
+    // Mapeo de plantillas a sus funciones de inicialización.
+    const initFunctionMap = {
+        './templates/register.html': () => { if (typeof initRegisterForm === 'function') initRegisterForm(); },
+        './templates/login.html': () => { if (typeof initLoginForm === 'function') initLoginForm(); },
+        './templates/profile.html': () => { if (typeof initProfilePage === 'function') initProfilePage(); },
+    };
+
+    const scriptSrc = scriptMap[templatePath];
     if (!scriptSrc) return;
 
-    // Crea y añade el nuevo script al DOM.
     const script = document.createElement('script');
-    script.id = 'view-script'; // ID para poder encontrarlo y eliminarlo en la siguiente navegación.
+    script.id = 'view-script';
     script.src = scriptSrc;
     
-    // El script se ejecuta al cargarse. Su evento 'onload' llama a la función de inicialización correspondiente.
     script.onload = () => {
-        // Se comprueba que la función de inicialización exista en el ámbito global antes de llamarla.
-        if (templatePath.includes('register.html')) {
-            if (typeof initRegisterForm === 'function') initRegisterForm();
-        } else if (templatePath.includes('login.html')) {
-            if (typeof initLoginForm === 'function') initLoginForm();
-        } else if (templatePath.includes('profile.html')) {
-            if (typeof initProfilePage === 'function') initProfilePage();
+        const initFunction = initFunctionMap[templatePath];
+        if (initFunction) {
+            initFunction();
         }
     };
     
@@ -117,7 +138,8 @@ async function loadAndExecuteScript(templatePath) {
 
 /**
  * Obtiene el contenido de un archivo de plantilla HTML desde el servidor.
- * Si la plantilla no se encuentra, carga y devuelve una plantilla de error 404 como fallback.
+ * Si la plantilla no se encuentra (error 404), carga una plantilla de error como fallback.
+ * @async
  * @param {string} path - La ruta al archivo de plantilla (.html).
  * @returns {Promise<string>} El contenido HTML de la plantilla.
  */
@@ -125,11 +147,11 @@ async function fetchTemplate(path) {
     try {
         const response = await fetch(path);
         if (!response.ok) {
-            throw new Error(`No se encontró el template en la ruta: ${path}`);
+            throw new Error(`Plantilla no encontrada en la ruta: ${path}`);
         }
         return await response.text();
     } catch (error) {
-        console.error('Error al cargar el template:', error);
+        console.error('Error al cargar la plantilla:', error);
         // Fallback: Carga la página de error si la plantilla solicitada falla.
         const response = await fetch('/templates/error-404.html');
         return await response.text();
@@ -137,49 +159,102 @@ async function fetchTemplate(path) {
 }
 
 /**
- * Renderiza una página en el contenedor #app-root basado en la ruta URL del navegador.
- * Gestiona la visibilidad del loader, obtiene la plantilla, actualiza el DOM, el título del documento y carga el script asociado.
+ * Inicia un sondeo periódico (polling) para actualizar los contadores de likes en tiempo real.
+ * Esto mantiene la UI actualizada sin necesidad de que el usuario recargue la página.
+ * @param {HTMLElement} messagesContainer - El contenedor de los mensajes donde buscar las tarjetas.
+ */
+function startLikePolling(messagesContainer) {
+    // Limpia cualquier intervalo de sondeo anterior para evitar duplicados.
+    if (window.pollInterval) clearInterval(window.pollInterval);
+
+    window.pollInterval = setInterval(async () => {
+        const cards = messagesContainer.querySelectorAll('.message-card');
+        if (cards.length === 0) return; // No hacer nada si no hay mensajes en la vista.
+
+        const messageIds = Array.from(cards).map(card => card.getAttribute('data-message-id'));
+        
+        try {
+            const response = await fetch(`/api/messages/counts?ids=${messageIds.join(',')}`);
+            if (!response.ok) return; // Salir silenciosamente si la API falla.
+
+            const counts = await response.json();
+
+            // Actualiza el contador de likes en cada tarjeta si ha cambiado.
+            for (const messageId in counts) {
+                const card = messagesContainer.querySelector(`.message-card[data-message-id="${messageId}"]`);
+                if (card) {
+                    const likeCountSpan = card.querySelector('.like-count');
+                    if (likeCountSpan && likeCountSpan.textContent !== String(counts[messageId])) {
+                        likeCountSpan.textContent = counts[messageId];
+                    }
+                }
+            }
+        } catch (error) {
+            // El error se silencia intencionadamente para no interrumpir al usuario
+            // con fallos de una tarea de fondo no crítica.
+        }
+    }, 10000); // El sondeo se ejecuta cada 10 segundos.
+}
+
+
+// ===================================
+//  ENRUTADOR Y RENDERIZADOR PRINCIPAL
+// ===================================
+
+/**
+ * Renderiza una página en el contenedor #app-root basado en la ruta URL.
+ * Es el núcleo de la SPA. Gestiona la visibilidad del loader, obtiene la plantilla,
+ * actualiza el DOM, el título del documento y carga el script asociado.
+ * @async
  * @param {string} path - La ruta de la URL a renderizar (ej. '/', '/login').
  * @returns {Promise<void>}
  */
 async function renderPage(path) {
-    // Muestra el loader y oculta el contenido principal durante la carga para mejorar la UX.
+    // Ignora el ancla (hash) para la lógica de enrutamiento, se usa solo para scroll.
+    const pathname = path.split('#')[0];
+
     loaderContainer.classList.remove('hidden');
     appRoot.classList.add('hidden');
+
+    // Detiene cualquier proceso de sondeo de la vista anterior para evitar consumo innecesario de recursos.
+    if (window.pollInterval) {
+        clearInterval(window.pollInterval);
+        window.pollInterval = null;
+    }
 
     let templatePath = '';
     
     // --- Lógica de Enrutamiento ---
-    // Este bloque 'if-else if' actúa como un enrutador del lado del cliente.
-    if (path === '/' || path === '/home') {
+    if (pathname === '/' || pathname === '/home') {
         appRoot.innerHTML = await fetchTemplate('./templates/home.html');
         document.title = 'Inicio';
 
+        // --- Lógica de la página de Inicio (Feed) ---
         const messagesContainer = document.getElementById('messages-container');
         const loadMoreBtn = document.getElementById('load-more-btn');
         const feedLoader = document.getElementById('feed-loader');
+
         let currentPage = 1;
         let totalPages = 1;
-        let pollInterval; // Variable para guardar la referencia al intervalo
-
-        // Limpiar intervalo anterior si existe (al navegar de vuelta a home)
-        if (window.pollInterval) {
-            clearInterval(window.pollInterval);
-        }
 
         const loadMessages = async () => {
-            if (currentPage > totalPages) return;
+            if (currentPage > totalPages) {
+                loadMoreBtn.classList.add('hidden');
+                return;
+            }
+            
             loadMoreBtn.classList.add('hidden');
             feedLoader.classList.remove('hidden');
+
             try {
                 const response = await fetch(`/api/messages?page=${currentPage}`);
                 if (!response.ok) throw new Error('Error al cargar los mensajes.');
                 const data = await response.json();
-                
+
                 if (currentPage === 1 && data.messages.length === 0) {
                     messagesContainer.innerHTML = `<div class="empty-feed-message"><br><p>Aún no hay mensajes publicados. ¡Sé el primero en compartir tus ideas!</p><br></div>`;
                     feedLoader.classList.add('hidden');
-                    return; 
+                    return;
                 }
 
                 data.messages.forEach(message => {
@@ -192,6 +267,8 @@ async function renderPage(path) {
 
                 if (currentPage <= totalPages) {
                     loadMoreBtn.classList.remove('hidden');
+                } else {
+                    loadMoreBtn.classList.add('hidden');
                 }
 
             } catch (error) {
@@ -202,81 +279,11 @@ async function renderPage(path) {
             }
         };
 
-        await loadMessages();
         loadMoreBtn.addEventListener('click', loadMessages);
-        
-        // --- LÓGICA DE LIKES ---
-        const handleLikeClick = async (event) => {
-            const likeButton = event.target.closest('.like-button');
-            if (!likeButton) return; // Si no se hizo clic en el botón, no hacer nada
+        await loadMessages(); // Carga inicial
+        startLikePolling(messagesContainer); // Inicia el sondeo de likes
 
-            const card = likeButton.closest('.message-card');
-            const messageId = card.getAttribute('data-message-id');
-
-            try {
-                const response = await fetch(`/api/messages/${messageId}/like`, {
-                    method: 'POST'
-                });
-
-                if (response.status === 401) {
-                    // Usuario no logueado, se ignora la pulsación silenciosamente
-                    console.log("Usuario no autenticado. El like fue ignorado.");
-                    return;
-                }
-                if (!response.ok) {
-                    throw new Error('Error del servidor al procesar el like.');
-                }
-                
-                const data = await response.json();
-
-                // Actualización optimista de la UI
-                const likeCountSpan = card.querySelector('.like-count');
-                likeCountSpan.textContent = data.likeCount;
-                
-                if (data.isLiked) {
-                    likeButton.classList.add('liked');
-                } else {
-                    likeButton.classList.remove('liked');
-                }
-
-            } catch (error) {
-                console.error(error.message);
-            }
-        };
-
-        messagesContainer.addEventListener('click', handleLikeClick);
-        
-        // --- LÓGICA DE POLLING CADA 5 SEGUNDOS ---
-        const updateAllLikeCounts = async () => {
-            const cards = messagesContainer.querySelectorAll('.message-card');
-            if (cards.length === 0) return;
-
-            const messageIds = Array.from(cards).map(card => card.getAttribute('data-message-id'));
-            
-            try {
-                const response = await fetch(`/api/messages/counts?ids=${messageIds.join(',')}`);
-                if (!response.ok) return;
-
-                const counts = await response.json();
-
-                for (const messageId in counts) {
-                    const card = messagesContainer.querySelector(`.message-card[data-message-id="${messageId}"]`);
-                    if (card) {
-                        const likeCountSpan = card.querySelector('.like-count');
-                        if (likeCountSpan.textContent !== String(counts[messageId])) {
-                            likeCountSpan.textContent = counts[messageId];
-                        }
-                    }
-                }
-            } catch (error) {
-                console.error('Error durante el sondeo de likes:', error);
-            }
-        };
-
-        // Iniciar el sondeo y guardarlo en una variable global para poder limpiarlo
-        window.pollInterval = setInterval(updateAllLikeCounts, 5000);
-
-        // --- LÓGICA PARA EL MODAL DE CREACIÓN DE MENSAJES ---
+        // --- Lógica del Modal de Creación de Mensajes ---
         const openModalBtn = document.getElementById('open-create-message-modal-btn');
         const modalOverlay = document.getElementById('create-message-modal');
         const closeModalBtn = document.getElementById('close-modal-btn');
@@ -293,15 +300,12 @@ async function renderPage(path) {
         openModalBtn.addEventListener('click', showModal);
         closeModalBtn.addEventListener('click', hideModal);
         modalOverlay.addEventListener('click', (e) => {
-            if (e.target === modalOverlay) {
-                hideModal();
-            }
+            if (e.target === modalOverlay) hideModal();
         });
 
         messageForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             modalError.classList.add('hidden');
-            
             const formData = new FormData(messageForm);
             const data = Object.fromEntries(formData.entries());
 
@@ -315,66 +319,80 @@ async function renderPage(path) {
                 if (!response.ok) {
                     throw new Error(responseData.message || 'Error desconocido al publicar.');
                 }
-                const newPost = responseData;
-                const newCard = createMessageCard(newPost);
                 
-                const emptyMessage = messagesContainer.querySelector('.empty-feed-message');
-                if (emptyMessage) {
-                    messagesContainer.innerHTML = '';
-                }
-                messagesContainer.prepend(newCard); 
                 hideModal();
+                // Refresca el feed para mostrar el nuevo mensaje.
+                currentPage = 1;
+                totalPages = 1;
+                messagesContainer.innerHTML = '';
+                await loadMessages();
+                
             } catch (error) {
                 modalError.textContent = error.message;
                 modalError.classList.remove('hidden');
             }
         });
 
+        // Lógica de 'likes' con delegación de eventos para optimizar rendimiento.
+        messagesContainer.addEventListener('click', async (event) => {
+            const likeButton = event.target.closest('.like-button');
+            if (!likeButton) return;
+
+            const card = likeButton.closest('.message-card');
+            const messageId = card.getAttribute('data-message-id');
+
+            try {
+                const response = await fetch(`/api/messages/${messageId}/like`, { method: 'POST' });
+                if (response.status === 401) return; // El usuario no está logueado.
+                if (!response.ok) throw new Error('Error del servidor al procesar el like.');
+                
+                const data = await response.json();
+
+                // Actualiza la UI de la tarjeta de forma optimista.
+                const likeCountSpan = card.querySelector('.like-count');
+                if (likeCountSpan) likeCountSpan.textContent = data.likeCount;
+                likeButton.classList.toggle('liked', data.isLiked);
+
+            } catch (error) {
+                console.error(error.message);
+            }
+        });
+        
+        // No se requiere cargar plantilla adicional, la lógica está contenida aquí.
         templatePath = '';
 
-    } else if (path === '/about' || path === '/about-AgoraDig' || path === '/about-us') {
+    } else if (pathname === '/about' || pathname === '/about-AgoraDig' || pathname === '/about-us') {
         templatePath = './templates/about.html';
         document.title = 'Acerca de';
-    } else if (path === '/contact' || path === '/contact-us') {
+    } else if (pathname === '/contact' || pathname === '/contact-us') {
         templatePath = './templates/contact.html';
         document.title = 'Contacto';
-    } else if (path === '/register') {
+    } else if (pathname === '/register') {
         templatePath = './templates/register.html';
         document.title = 'Crear Cuenta';
-    } else if (path === '/register-success') {
+    } else if (pathname === '/register-success') {
         templatePath = './templates/register-success.html';
         document.title = 'Registro Exitoso';
-    } else if (path === '/login') {
+    } else if (pathname === '/login') {
         templatePath = './templates/login.html';
         document.title = 'Iniciar Sesión';
     } else if (path.startsWith('/view-profile')) {
 
         try {
-            // Se extrae el nombre de usuario de los parámetros de consulta de la URL.
             const params = new URLSearchParams(window.location.search);
             const username = params.get('username');
-
-            if (!username) {
-                throw new Error('Nombre de usuario no especificado en la URL.');
-            }
-
-            // 1. Obtener los datos públicos del usuario desde la API.
+            if (!username) throw new Error('Nombre de usuario no especificado en la URL.');
+            
             const response = await fetch(`/api/users/username/${encodeURIComponent(username)}`);
-
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.message || 'No se pudieron cargar los datos del perfil.');
             }
             const userData = await response.json();
-
-            // 2. Obtener la plantilla HTML para el perfil.
             let profileHtml = await fetchTemplate('./templates/view-profile.html');
+            const joinDate = new Date(userData.createdAt).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
 
-            // 3. Poblar la plantilla reemplazando los placeholders con los datos del usuario.
-            const joinDate = new Date(userData.createdAt).toLocaleDateString('es-ES', {
-                year: 'numeric', month: 'long', day: 'numeric'
-            });
-
+            // Inyecta dinámicamente los datos del usuario en la plantilla.
             profileHtml = profileHtml
                 .replace(/{{profilePicturePath}}/g, userData.profilePicturePath || '../images/default-avatar.webp')
                 .replace(/{{firstName}}/g, userData.firstName)
@@ -383,10 +401,9 @@ async function renderPage(path) {
                 .replace(/{{description}}/g, userData.description || 'Este usuario aún no ha añadido una descripción.')
                 .replace(/{{createdAt}}/g, joinDate);
 
-            // 4. Renderizar el HTML poblado y actualizar el título.
             appRoot.innerHTML = profileHtml;
             document.title = `Perfil de ${userData.username}`;
-            templatePath = ''; // Se vacía para que no se renderice de nuevo más abajo.
+            templatePath = ''; // No se requiere cargar script ni plantilla adicional.
 
         } catch (error) {
             console.error('Error al renderizar el perfil de usuario:', error);
@@ -395,15 +412,12 @@ async function renderPage(path) {
         }
     
     } else if (path.startsWith('/profile')) {
-        // --- Lógica de renderizado para la vista de perfil del propio usuario (ruta privada) ---
         try {
-            // Se solicita al servidor los datos del perfil del usuario autenticado.
             const response = await fetch('/api/profile');
             if (!response.ok) {
-                // Si el usuario no está autenticado (401), se le redirige a la página de login.
                 if (response.status === 401) {
                     window.history.pushState({}, '', '/login');
-                    await renderPage('/login'); // Llama recursivamente a renderPage para mostrar la vista de login.
+                    await renderPage('/login');
                     return; // Detiene la ejecución para evitar más renderizados.
                 }
                 throw new Error('Error al obtener los datos del perfil.');
@@ -411,15 +425,10 @@ async function renderPage(path) {
 
             const userData = await response.json();
             const profileHtml = await fetchTemplate('./templates/profile.html');
-            
             appRoot.innerHTML = profileHtml;
-
-            const joinDate = new Date(userData.createdAt).toLocaleDateString('es-ES', {
-                year: 'numeric', month: 'long', day: 'numeric'
-            });
+            const joinDate = new Date(userData.createdAt).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
             
-            // Se utilizan selectores de clase y 'textContent' para poblar los datos de forma segura,
-            // lo que previene vulnerabilidades de Cross-Site Scripting (XSS).
+            // Rellena la plantilla con los datos del perfil del usuario.
             const profilePicture = appRoot.querySelector('.profile-picture');
             if (profilePicture) {
                 profilePicture.src = userData.profilePicturePath || '../images/default-avatar.webp';
@@ -438,82 +447,96 @@ async function renderPage(path) {
             const joinDateEl = appRoot.querySelector('.profile-meta span');
             if (joinDateEl) joinDateEl.textContent = `Miembro desde: ${joinDate}`;
 
-            document.title = userData.username; // Actualiza el título de la página.
-            
-            templatePath = ''; // Se limpia la ruta para que no se procese de nuevo.
-            await loadAndExecuteScript('./templates/profile.html'); // Se carga el script asociado a la vista de perfil.
+            document.title = userData.username;
+            templatePath = ''; // Se resetea para indicar que el script se cargará manualmente.
+            await loadAndExecuteScript('./templates/profile.html');
 
         } catch (error) {
             console.error(error);
             appRoot.innerHTML = await fetchTemplate('./templates/error-404.html');
         }
-    } else if (path === '/terms-and-conditions') {
+    } else if (pathname === '/terms-and-conditions') {
         templatePath = './templates/terms-and-conditions.html';
         document.title = 'Términos y Condiciones';
-    } else if (path === '/privacy-policy') {
+    } else if (pathname === '/privacy-policy') {
         templatePath = './templates/privacy-policy.html';
         document.title = 'Política de Privacidad';
     } else {
-        // Ruta por defecto si no coincide ninguna de las anteriores.
         templatePath = './templates/error-404.html';
         document.title = 'ERROR 404';
     }
 
-    // Si se encontró una plantilla estática, se renderiza su contenido.
+    // Carga la plantilla si se ha definido una en el enrutador.
     if (templatePath) {
         appRoot.innerHTML = await fetchTemplate(templatePath);
     }
     
-    // Lógica específica post-renderizado para la página de registro exitoso.
-    if (path === '/register-success') {
-        // Recupera el PIN desde sessionStorage para mostrarlo al usuario.
+    // Lógica especial para la página de registro exitoso.
+    if (pathname === '/register-success') {
         const pin = sessionStorage.getItem('registrationPin');
         const pinDisplayElement = document.getElementById('recovery-pin-display');
 
         if (pin && pinDisplayElement) {
             pinDisplayElement.textContent = pin;
-            // Limpia el PIN del sessionStorage por seguridad después de mostrarlo.
-            sessionStorage.removeItem('registrationPin'); 
+            sessionStorage.removeItem('registrationPin'); // El PIN se muestra una sola vez.
         }
     }
 
-    // Carga el script asociado a la vista estática, si se definió una ruta de plantilla.
+    // Carga el script asociado a la plantilla si corresponde.
     if(templatePath) {
         await loadAndExecuteScript(templatePath);
     }
 
-    // Oculta el loader y muestra el contenido ya renderizado.
     loaderContainer.classList.add('hidden'); 
     appRoot.classList.remove('hidden');
 }
 
 /**
- * Manejador centralizado para los eventos de clic de navegación.
- * Intercepta los clics en enlaces `<a>` para evitar la recarga completa de la página.
+ * Manejador centralizado para los eventos de clic en enlaces de navegación.
+ * Intercepta los clics en `<a>` para implementar la navegación de la SPA
+ * sin recargar la página completa, utilizando la History API.
+ * @async
  * @param {MouseEvent} event - El objeto del evento de clic.
  */
 async function handleNavClick(event) {
-    // Busca el enlace `<a>` más cercano al elemento clickeado.
     const targetLink = event.target.closest('a');
     
-    // Procesa el clic solo si es un enlace de navegación interna (sin target="_blank" y con href).
-    if (targetLink && targetLink.hasAttribute('href') && !targetLink.target) {
-        event.preventDefault(); // Previene la navegación por defecto del navegador.
-        const path = targetLink.getAttribute('href');
-        
-        // Actualiza el estado del historial del navegador y renderiza la nueva página solo si la ruta es diferente.
-        if (window.location.pathname !== path) {
-            window.history.pushState({}, '', path); 
-            await renderPage(path); 
+    // Ignorar clics que no son para la navegación de la SPA.
+    if (!targetLink || !targetLink.hasAttribute('href') || targetLink.target || targetLink.href.includes('mailto:')) {
+        return;
+    }
+
+    event.preventDefault(); // Prevenir la navegación tradicional del navegador.
+
+    const targetUrl = new URL(targetLink.href);
+    const targetPathname = targetUrl.pathname;
+    const targetHash = targetUrl.hash; // Captura el ancla (ej. "#home-feed")
+
+    // Si el destino es una ruta diferente, renderiza la nueva página.
+    if (window.location.pathname !== targetPathname) {
+        window.history.pushState({}, '', targetPathname);
+        await renderPage(targetPathname);
+
+        // Si la URL de destino tiene un ancla, desplazarse a ella después de renderizar.
+        if (targetHash) {
+            // Se usa un pequeño retardo para asegurar que el DOM esté completamente actualizado.
+            setTimeout(() => scrollToElement(targetHash), 100);
         }
+    } else if (targetHash) {
+        // Si es la misma página, solo nos desplazamos al ancla.
+        scrollToElement(targetHash);
     }
 }
 
-// --- Inicialización de Event Listeners ---
+// ===================================
+//  INICIALIZACIÓN DE LA APLICACIÓN
+// ===================================
 
-// Listener para la navegación dentro de la SPA (delegación de eventos en 'document').
+// Listener para manejar toda la navegación por clics.
 document.addEventListener('click', handleNavClick);
-// Listener para los botones de "atrás" y "adelante" del navegador.
+
+// Listener para manejar los botones de 'atrás' y 'adelante' del navegador.
 window.addEventListener('popstate', () => { renderPage(window.location.pathname); });
-// Listener para la carga inicial de la página.
+
+// Listener para renderizar la página inicial cuando el DOM esté listo.
 document.addEventListener('DOMContentLoaded', () => { renderPage(window.location.pathname); });
