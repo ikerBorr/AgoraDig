@@ -22,7 +22,7 @@
     background-color: var(--color-fondo-tarjeta); /* Utiliza una variable CSS para el color de fondo, facilitando el theming. */
     border: 1px solid var(--color-borde);
     border-radius: 8px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1); /* Sombra sutil para dar profundidad. */
+    box-shadow: 0 2px 5px var(--color-sombra-tarjeta); 
     padding: 1.5rem;
     transition: box-shadow 0.2s ease; /* Transición suave para el efecto hover. */
     text-align: left; /* Asegura que el texto esté alineado a la izquierda, evitando herencias no deseadas. */
@@ -30,7 +30,7 @@
 
 /* Al pasar el cursor, la sombra se intensifica para dar feedback visual al usuario. */
 .message-card:hover {
-    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 10px var(--color-sombra-tarjeta-hover);
 }
 
 /* --- Cabecera de la Tarjeta --- */

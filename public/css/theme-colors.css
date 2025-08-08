@@ -28,6 +28,10 @@
   --color-boton-secundario-borde:       hsl(var(--tono-primario), var(--saturacion-primaria), 45%);
   --color-boton-secundario-fondo-hover: hsla(var(--tono-primario), var(--saturacion-primaria), 50%, 0.1);
 
+  /*Colores para Sombras y Componentes de mensajes*/
+  --color-sombra-tarjeta:       rgba(0, 0, 0, 0.1);
+  --color-sombra-tarjeta-hover: rgba(0, 0, 0, 0.15);
+
   /* Color para like */
   --color-like:               hsl(0, 85%, 55%);
 }
@@ -53,6 +57,10 @@ body.night-mode, body.dark-mode { /* Se añade .dark-mode para compatibilidad */
   --color-boton-secundario-texto:       hsl(var(--tono-primario), var(--saturacion-primaria), 70%);
   --color-boton-secundario-borde:       hsl(var(--tono-primario), var(--saturacion-primaria), 65%);
   --color-boton-secundario-fondo-hover: hsla(var(--tono-primario), var(--saturacion-primaria), 70%, 0.15);
+
+  /*Colores para Sombras y Componentes de mensajes*/
+  --color-sombra-tarjeta:       rgba(255, 255, 255, 0.08);
+  --color-sombra-tarjeta-hover: rgba(255, 255, 255, 0.12);
 
   /* Color para like */
   --color-like:               hsl(0, 85%, 65%);
