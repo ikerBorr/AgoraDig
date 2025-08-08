@@ -29,6 +29,34 @@ const helmet = require('helmet'); // Middleware que establece varias cabeceras H
 
 
 // =================================================================
+//  FUNCIONES DE AYUDA
+// =================================================================
+
+const DEFAULT_AVATAR_PATH = 'images/default-avatar.webp'; // Ruta relativa a la carpeta 'public'
+
+/**
+ * Verifica si la ruta de una imagen de perfil existe en el sistema de archivos.
+ * Si no existe, devuelve la ruta de la imagen por defecto.
+ * @param {string} picturePath - La ruta de la imagen guardada en la BD.
+ * @returns {string} Una ruta de imagen válida y segura para ser servida al cliente.
+ */
+function getValidProfilePicturePath(picturePath) {
+    // Si la ruta es nula o indefinida, devolver directamente el avatar por defecto.
+    if (!picturePath) {
+        return DEFAULT_AVATAR_PATH;
+    }
+    // Componer la ruta absoluta en el servidor para verificar la existencia del archivo.
+    const fullPath = path.join(__dirname, 'public', picturePath);
+    // Si el archivo existe físicamente, la ruta es válida.
+    if (fs.existsSync(fullPath)) {
+        return picturePath;
+    }
+    // En caso contrario, devolver la ruta por defecto para evitar enlaces rotos.
+    return DEFAULT_AVATAR_PATH;
+}
+
+
+// =================================================================
 //  INITIALIZATION AND CONFIG
 // =================================================================
 const app = express();
@@ -56,6 +84,7 @@ app.use(helmet());
 app.use(express.json());
 
 // Middleware para servir archivos estáticos (imágenes de perfil subidas).
+// Asocia la ruta virtual '/uploads' con la carpeta física 'uploads'.
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Configuración de la sesión de usuario
@@ -65,7 +94,7 @@ app.use(session({
     resave: false,                           // No volver a guardar la sesión si no ha cambiado.
     saveUninitialized: false,                // No crear sesión hasta que algo se almacene.
     store: MongoStore.create({ mongoUrl: mongoUrl }), // Almacenar las sesiones en la base de datos MongoDB.
-    cookie: { 
+    cookie: {
         maxAge: 1000 * 60 * 60 * 24 * 14,     // Duración de la cookie: 14 días.
         secure: process.env.NODE_ENV === 'production', // Asegura que la cookie solo se envíe sobre HTTPS en producción.
         httpOnly: true,                      // Previene que la cookie sea accesible desde el JavaScript del cliente (mitiga ataques XSS).
@@ -79,6 +108,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // --- Middlewares de Seguridad (Rate Limiters) ---
 
 /**
+ * @const {object} DoSLimiter
  * @description Limitador de peticiones global para mitigar ataques de denegación de servicio (DoS).
  * Limita a 200 peticiones por IP cada 15 minutos.
  */
@@ -91,6 +121,7 @@ const DoSLimiter = rateLimit({
 });
 
 /**
+ * @const {object} sensitiveRouteLimiter
  * @description Limitador de peticiones más estricto para rutas sensibles (login, registro).
  * Limita a 10 peticiones por IP cada 5 minutos para prevenir ataques de fuerza bruta.
  */
@@ -106,6 +137,7 @@ const sensitiveRouteLimiter = rateLimit({
 app.use(DoSLimiter);
 
 /**
+ * @function isAuthenticated
  * @description Middleware para verificar si un usuario está autenticado.
  * Comprueba la existencia de `req.session.userId`. Si no existe, rechaza la
  * petición con un estado 401. Si existe, permite que la petición continúe
@@ -148,7 +180,7 @@ const userSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     password: { type: String, required: true, select: false }, // `select: false` evita que se devuelva por defecto en las consultas.
     recoveryPIN: { type: String, required: true, select: false, unique: true },
-    
+
     // Información del perfil público
     description: { type: String, trim: true, maxlength: 300, default: '' },
     profilePicturePath: { type: String },
@@ -159,8 +191,9 @@ const userSchema = new mongoose.Schema({
     // Metadatos de la cuenta
     role: { type: String, enum: ['user', 'admin', 'moderator'], default: 'user', index: true },
     userStatus: { type: String, enum: ['active', 'verified', 'banned'], default: 'active', index: true },
+    /** @property {Number} strikes - Contador de infracciones o 'strikes'. Usado para moderación automática o manual. */
     strikes: { type: Number, default: 0 }
-}, { 
+}, {
     // `timestamps: true` añade automáticamente los campos `createdAt` y `updatedAt`.
     timestamps: true,
 });
@@ -185,6 +218,7 @@ const upload = multer({
 const messageSchema = new mongoose.Schema({
     // Datos del mensaje
     sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    /** @property {mongoose.Schema.Types.ObjectId} referencedMessage - ID del mensaje al que se está respondiendo (para hilos o citas). Nulo si es un mensaje raíz. */
     referencedMessage: { type: mongoose.Schema.Types.ObjectId, ref: 'Message', default: null, index: true },
 
     // Contenido del mensaje
@@ -195,7 +229,7 @@ const messageSchema = new mongoose.Schema({
     // Metadatos del mensaje
     likes: { type: [mongoose.Schema.Types.ObjectId], ref: 'User', default: [] },
     messageStatus: { type: String, enum: ['active', 'deleted', 'deletedByModerator'], default: 'active', index: true }
-}, { 
+}, {
     // `timestamps: true` añade automáticamente los campos `createdAt` y `updatedAt`.
     timestamps: true,
     // `toJSON` y `toObject` con `virtuals: true` asegura que los campos virtuales se incluyan al convertir a JSON.
@@ -255,7 +289,7 @@ app.post('/login', sensitiveRouteLimiter, async (req, res) => {
         if (!isMatch) {
             return res.status(401).json({ errors: { password: 'La contraseña es incorrecta.' } });
         }
-        
+
         // Almacenar el ID del usuario en la sesión para mantenerlo autenticado en futuras peticiones.
         req.session.userId = user._id;
 
@@ -279,7 +313,7 @@ app.post('/login', sensitiveRouteLimiter, async (req, res) => {
  * @returns {object} 413 - El archivo subido es demasiado grande.
  * @returns {object} 500 - Error interno del servidor.
  */
-app.post('/register', 
+app.post('/register',
     // 1. Middleware para gestionar la subida del archivo. Se manejan errores específicos de Multer.
     (req, res, next) => {
         upload.single('profilePicture')(req, res, (err) => {
@@ -294,9 +328,9 @@ app.post('/register',
             // Si no hay errores, pasar al siguiente middleware/controlador.
             next();
         });
-    }, 
+    },
     // 2. Aplicar el limitador de peticiones para rutas sensibles.
-    sensitiveRouteLimiter, 
+    sensitiveRouteLimiter,
     // 3. Controlador principal de la ruta.
     async (req, res) => {
 
@@ -307,7 +341,7 @@ app.post('/register',
         const {
             firstName, lastName, dateOfBirth,
             username, email, confirmEmail, password, confirmPassword,
-            description, acceptsPublicity 
+            description, acceptsPublicity
         } = req.body;
 
         // --- Función de limpieza para eliminar el archivo temporal si algo falla ---
@@ -322,7 +356,8 @@ app.post('/register',
             cleanupTempFile(); // Eliminar archivo temporal si la validación falla.
             return res.status(400).json({ errors: { general: 'Faltan campos por rellenar.' } });
         }
-        
+
+        // Regex que permite letras de cualquier idioma y espacios. El flag 'u' es para soporte Unicode.
         const nameRegex = /^[\p{L}\s]+$/u;
         if (!nameRegex.test(firstName)) {
             cleanupTempFile();
@@ -364,20 +399,20 @@ app.post('/register',
             cleanupTempFile();
             return res.status(400).json({ errors: { dateOfBirth: 'La fecha de nacimiento proporcionada no es válida o eres demasiado joven para registrarte.' }});
         }
-        
+
         // --- Procesamiento de datos y creación de usuario ---
 
         // Generar "salt" y hashear la contraseña. Un costo de 12 es un buen balance entre seguridad y rendimiento.
-        const salt = await bcrypt.genSalt(12); 
+        const salt = await bcrypt.genSalt(12);
         const hashedPassword = await bcrypt.hash(password, salt);
-        
+
         // Generar un PIN de recuperación único y hashearlo. Se usa crypto para aleatoriedad segura.
         const plainTextRecoveryPIN = crypto.randomBytes(8).toString('hex').toUpperCase();
         const hashedRecoveryPIN = await bcrypt.hash(plainTextRecoveryPIN, salt);
 
         // Crear una nueva instancia del modelo User.
         const newUser = new User({
-            firstName, lastName, dateOfBirth, 
+            firstName, lastName, dateOfBirth,
             username, email, password: hashedPassword, recoveryPIN: hashedRecoveryPIN,
             description, acceptsPublicity: !!acceptsPublicity, // Convierte el valor a booleano.
         });
@@ -391,8 +426,8 @@ app.post('/register',
 
         // Usar Sharp para redimensionar, convertir a formato .webp y optimizar la imagen.
         await sharp(tempFile.path)
-            .resize(500, 500, { fit: 'cover' })
-            .webp({ quality: 80 })
+            .resize(500, 500, { fit: 'cover' }) // 'cover' recorta la imagen para que encaje sin distorsionar.
+            .webp({ quality: 80 }) // Convierte a WebP con un 80% de calidad.
             .toFile(newPath);
 
         // Eliminar el archivo temporal original subido por multer, ya que el procesado ya se guardó.
@@ -407,7 +442,7 @@ app.post('/register',
             userId: newUser._id,
             // Se devuelve el PIN en texto plano UNA ÚNICA VEZ para que el cliente lo muestre al usuario.
             // El frontend debe encargarse de que el usuario lo guarde y luego descartarlo.
-            recoveryPIN: plainTextRecoveryPIN 
+            recoveryPIN: plainTextRecoveryPIN
         });
 
     } catch (error) {
@@ -440,18 +475,20 @@ app.post('/register',
 
 /**
  * @route   POST /logout
- * @description Cierra la sesión del usuario actual destruyendo la sesión en el servidor.
- * @access  Private (requiere estar autenticado a través del middleware `isAuthenticated` si se aplicara a nivel de ruta)
+ * @description Cierra la sesión del usuario actual destruyendo la sesión en el servidor y limpiando la cookie del cliente.
+ * @access  Private (implícitamente, ya que solo tiene sentido para un usuario con sesión activa)
  * @returns {object} 200 - Mensaje de éxito.
  * @returns {object} 500 - Si no se pudo destruir la sesión.
  */
 app.post('/logout', (req, res) => {
+    // El método destroy() elimina la sesión de la store de MongoDB.
     req.session.destroy(err => {
         if (err) {
             console.error('Error en /logout:', err);
             return res.status(500).json({ message: 'No se pudo cerrar la sesión.' });
         }
-        res.clearCookie('connect.sid'); // Limpia la cookie de sesión del navegador.
+        // Limpia la cookie de sesión del navegador para completar el proceso de cierre de sesión.
+        res.clearCookie('connect.sid');
         res.status(200).json({ message: 'Sesión cerrada con éxito.' });
     });
 });
@@ -488,6 +525,9 @@ app.get('/api/profile', async (req, res) => {
             return res.status(404).json({ message: 'Usuario no encontrado.' });
         }
 
+        // Validar la ruta de la imagen de perfil antes de enviarla.
+        user.profilePicturePath = getValidProfilePicturePath(user.profilePicturePath);
+
         res.status(200).json(user);
 
     } catch (error) {
@@ -517,7 +557,7 @@ app.patch('/api/profile', isAuthenticated, async (req, res) => {
         if (!username && description === undefined) {
             return res.status(400).json({ message: 'No se proporcionaron datos para actualizar.' });
         }
-        
+
         const errors = {};
         if (username && (username.length < 3 || username.length > 20)) {
             errors.username = 'El nombre de usuario debe tener entre 3 y 20 caracteres.';
@@ -537,7 +577,7 @@ app.patch('/api/profile', isAuthenticated, async (req, res) => {
                 return res.status(409).json({ errors: { username: 'Este nombre de usuario ya está en uso.' } });
             }
         }
-        
+
         // Construir el objeto de actualización solo con los campos proporcionados.
         const updateData = {};
         if (username) updateData.username = username;
@@ -577,8 +617,8 @@ app.patch('/api/profile', isAuthenticated, async (req, res) => {
  * @route   GET /api/messages
  * @description Obtiene una lista paginada de mensajes activos.
  * @access  Public
- * @param {number} req.query.page - El número de página a obtener (por defecto 1).
- * @param {number} req.query.limit - El número de mensajes por página (por defecto 10).
+ * @param {number} [req.query.page=1] - El número de página a obtener.
+ * @param {number} [req.query.limit=10] - El número de mensajes por página.
  * @returns {object} 200 - Un objeto con los mensajes y la información de paginación.
  * @returns {object} 500 - Error interno del servidor.
  */
@@ -594,20 +634,26 @@ app.get('/api/messages', async (req, res) => {
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit)
-            .populate('sender', 'username profilePicturePath') 
+            .populate('sender', 'username profilePicturePath')
             .lean(); // .lean() es importante para poder modificar los objetos después
 
-        // Si hay un usuario logueado, procesamos los mensajes para añadir el estado del like.
-        if (req.session.userId) {
-            const userId = req.session.userId;
-            messages = messages.map(message => {
-                // Comprobamos si el array de likes (que contiene ObjectIds) incluye el ID del usuario.
-                // Usamos .toString() para una comparación segura de los ObjectIds.
-                const isLiked = message.likes.some(like => like.toString() === userId.toString());
-                return { ...message, isLiked }; // Añadimos la nueva propiedad 'isLiked'
-            });
-        }
-        // Si no hay usuario logueado, los mensajes se envían sin la propiedad 'isLiked' (o será undefined).
+        messages = messages.map(message => {
+            if (message.sender) {
+                // Se asegura de que la ruta del avatar sea válida o usa la de por defecto.
+                message.sender.profilePicturePath = getValidProfilePicturePath(message.sender.profilePicturePath);
+            } else {
+                // Manejar el caso de un mensaje cuyo autor fue eliminado.
+                message.sender = {
+                    username: 'Usuario Eliminado',
+                    profilePicturePath: DEFAULT_AVATAR_PATH
+                };
+            }
+            // Se añade el campo 'isLiked' para que el frontend sepa si el usuario actual ha dado 'like'.
+            // Es necesario comparar los ObjectIds como strings para un resultado correcto.
+            const isLiked = req.session.userId ? message.likes.some(like => like.toString() === req.session.userId.toString()) : false;
+
+            return { ...message, isLiked };
+        });
 
         const totalMessages = await Message.countDocuments({ messageStatus: 'active' });
 
@@ -629,7 +675,7 @@ app.get('/api/messages', async (req, res) => {
  * @access  Private (requiere estar autenticado y no baneado)
  * @param {string} req.body.title - El título del mensaje.
  * @param {string} req.body.content - El contenido del mensaje.
- * @param {string} req.body.hashtags - Una cadena de texto con los hashtags (ej: "#tag1 #tag2").
+ * @param {string} [req.body.hashtags] - Una cadena de texto con los hashtags (ej: "#tag1 #tag2").
  * @returns {object} 201 - El objeto del mensaje recién creado.
  * @returns {object} 400 - Errores de validación de los datos.
  * @returns {object} 401 - Si el usuario no está autenticado.
@@ -665,7 +711,8 @@ app.post('/api/messages', isAuthenticated, async (req, res) => {
         }
 
         // --- Procesamiento de Hashtags ---
-        // Extrae hashtags de una cadena de texto (ej: "Mi mensaje #hola #mundo") y los convierte en un array de strings limpios.
+        // Extrae hashtags de la cadena (ej: "Mi mensaje #hola #mundo") y los convierte en un array limpio ['hola', 'mundo'].
+        // El optional chaining `?.` evita errores si `match` devuelve null.
         const parsedHashtags = hashtags ? hashtags.match(/#(\w+)/g)?.map(h => h.substring(1)) || [] : [];
 
         // --- Creación del Mensaje ---
@@ -680,9 +727,14 @@ app.post('/api/messages', isAuthenticated, async (req, res) => {
 
         // Poblamos los datos del sender para devolver el objeto completo al frontend
         // y que pueda renderizar la tarjeta sin hacer otra petición.
-        await newMessage.populate('sender', 'username profilePicturePath');
-        
-        res.status(201).json(newMessage);
+        const populatedMessage = await newMessage.populate('sender', 'username profilePicturePath');
+
+        // Se convierte a objeto plano para poder manipularlo y validar la ruta del avatar.
+        const responseMessage = populatedMessage.toObject();
+        responseMessage.sender.profilePicturePath = getValidProfilePicturePath(responseMessage.sender.profilePicturePath);
+
+        // Se envía la versión poblada y con la ruta del avatar validada.
+        res.status(201).json(responseMessage);
 
     } catch (error) {
         console.error('Error en POST /api/messages:', error);
@@ -730,7 +782,7 @@ app.post('/api/messages/:id/like', isAuthenticated, async (req, res) => {
                 { new: true }
             );
         }
-        
+
         res.status(200).json({
             likeCount: updatedMessage.likeCount,
             isLiked: !hasLiked // Devuelve el nuevo estado del like
@@ -744,7 +796,7 @@ app.post('/api/messages/:id/like', isAuthenticated, async (req, res) => {
 
 /**
  * @route   GET /api/messages/counts
- * @description Obtiene los contadores de likes actualizados para una lista de mensajes.
+ * @description Obtiene los contadores de likes actualizados para una lista de mensajes. Ideal para polling.
  * @access  Public
  * @param {string} req.query.ids - Una cadena de IDs de mensajes separados por coma.
  * @returns {object} 200 - Un objeto mapeando cada ID de mensaje a su contador de likes.
@@ -759,11 +811,12 @@ app.get('/api/messages/counts', async (req, res) => {
         }
 
         const messageIds = ids.split(',');
-        
+
         const messages = await Message.find({
             '_id': { $in: messageIds }
-        }).select('_id likes'); // Solo seleccionamos los campos necesarios
+        }).select('_id likes'); // Solo seleccionamos los campos necesarios para optimizar la consulta.
 
+        // Se usa reduce para transformar el array de mensajes en un objeto { messageId: likeCount }.
         const counts = messages.reduce((acc, msg) => {
             acc[msg._id] = msg.likeCount;
             return acc;
@@ -797,6 +850,9 @@ app.get('/api/users/username/:username', async (req, res) => {
         if (!user) {
             return res.status(404).json({ message: 'Usuario no encontrado.' });
         }
+
+        // Se valida la ruta de la imagen antes de devolverla.
+        user.profilePicturePath = getValidProfilePicturePath(user.profilePicturePath);
 
         res.status(200).json(user);
 
