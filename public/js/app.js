@@ -27,6 +27,7 @@ const loaderContainer = document.getElementById('loader-container');
  * @param {string} message._id - El ID único del mensaje.
  * @param {string} message.title - El título del mensaje.
  * @param {string} message.content - El contenido del mensaje.
+ * @param {Array<string>} message.hashtags - Array con los hashtags del mensaje.
  * @param {number} message.likeCount - El número de 'likes' del mensaje.
  * @param {boolean} message.isLiked - Indica si el usuario actual ha dado 'like' a este mensaje.
  * @param {object} message.sender - El objeto del autor del mensaje.
@@ -48,6 +49,9 @@ function createMessageCard(message) {
     const likeCount = message.likeCount !== undefined ? message.likeCount : (message.likes ? message.likes.length : 0);
     const likedClass = message.isLiked ? 'liked' : '';
 
+    // Formatea los hashtags para que sean enlaces.
+    const formattedHashtags = message.hashtags && message.hashtags.length > 0 ? message.hashtags.map(tag => `<a href="#" class="hashtag-link">#${tag}</a>`).join(' ') : '';
+
     card.innerHTML = `
         <div class="card-header">
             <div class="author-info">
@@ -66,6 +70,7 @@ function createMessageCard(message) {
         <div class="card-body">
             <h4 class="message-title">${message.title}</h4>
             <p class="message-content">${message.content}</p>
+            <small class="message-hashtags">${formattedHashtags}</small>
         </div>
     `;
     

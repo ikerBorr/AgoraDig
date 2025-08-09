@@ -96,6 +96,11 @@
     word-break: break-word; /* Evita que palabras muy largas se desborden y rompan el layout de la tarjeta. */
 }
 
+.card-body .message-hashtags {
+    margin: 0.5rem 0 0 0;
+    font-size: 0.9rem;
+    color: var(--color-texto-secundario);
+}
 /* --- Mensaje de Feed Vacío --- */
 .empty-feed-message {
     text-align: center;
