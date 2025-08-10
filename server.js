@@ -105,6 +105,29 @@ app.use(session({
 // Middleware para servir los archivos estáticos del frontend (HTML, CSS, JS).
 app.use(express.static(path.join(__dirname, 'public')));
 
+/**
+ * @function isModeratorOrAdmin
+ * @description Middleware para verificar si un usuario es moderador o administrador.
+ * @param {object} req - Objeto de la petición de Express.
+ * @param {object} res - Objeto de la respuesta de Express.
+ * @param {function} next - Función callback para pasar al siguiente middleware.
+ */
+const isModeratorOrAdmin = async (req, res, next) => {
+    try {
+        const user = await User.findById(req.session.userId).select('role');
+        if (user && (user.role === 'admin' || user.role === 'moderator')) {
+            // Adjuntamos el rol a la petición para usarlo en el controlador
+            req.userRole = user.role; 
+            next();
+        } else {
+            res.status(403).json({ message: 'Acceso denegado. Se requieren privilegios de moderación.' });
+        }
+    } catch (error) {
+        console.error('Error en middleware isModeratorOrAdmin:', error);
+        res.status(500).json({ message: 'Error del servidor al verificar los permisos.' });
+    }
+};
+
 // --- Middlewares de Seguridad (Rate Limiters) ---
 
 /**
@@ -832,26 +855,38 @@ app.get('/api/messages/counts', async (req, res) => {
 
 /**
  * @route   GET /api/users/username/:username
- * @description Obtiene los datos del perfil PÚBLICO de un usuario por su nombre de usuario.
- * @access  Public
+ * @description Obtiene los datos del perfil PÚBLICO de un usuario. Si el solicitante es admin/moderador
+ * y lo pide explícitamente, se incluyen los datos de moderación.
+ * @access  Public (con datos privados para roles autorizados)
  * @param {string} req.params.username - El nombre de usuario a consultar.
- * @returns {object} 200 - Objeto con los datos públicos del perfil del usuario.
- * @returns {object} 404 - Si el usuario no se encuentra.
- * @returns {object} 500 - Error interno del servidor.
+ * @param {boolean} [req.query.include_moderation] - Si es true, intenta incluir datos de moderación.
+ * @returns {object} 200 - Objeto con los datos del perfil del usuario.
  */
 app.get('/api/users/username/:username', async (req, res) => {
     try {
         const { username } = req.params;
+        let fieldsToSelect = 'firstName lastName username description profilePicturePath createdAt';
+        let requesterIsModeratorOrAdmin = false;
 
-        const user = await User.findOne({ username: username })
-            // Se seleccionan únicamente los campos que son seguros para ser públicos.
-            .select('firstName lastName username description profilePicturePath createdAt');
+        // Si se solicita información de moderación, primero verificamos los permisos del solicitante.
+        if (req.query.include_moderation === 'true' && req.session.userId) {
+            const requester = await User.findById(req.session.userId).select('role');
+            if (requester && (requester.role === 'admin' || requester.role === 'moderator')) {
+                requesterIsModeratorOrAdmin = true;
+            }
+        }
+
+        // Si el solicitante tiene permisos, añadimos los campos de moderación a la selección.
+        if (requesterIsModeratorOrAdmin) {
+            fieldsToSelect += ' role strikes userStatus';
+        }
+        
+        const user = await User.findOne({ username: username }).select(fieldsToSelect);
 
         if (!user) {
             return res.status(404).json({ message: 'Usuario no encontrado.' });
         }
 
-        // Se valida la ruta de la imagen antes de devolverla.
         user.profilePicturePath = getValidProfilePicturePath(user.profilePicturePath);
 
         res.status(200).json(user);
@@ -859,6 +894,75 @@ app.get('/api/users/username/:username', async (req, res) => {
     } catch (error) {
         console.error(`Error al obtener el perfil público por username ${req.params.username}:`, error);
         res.status(500).json({ message: 'Error en el servidor.' });
+    }
+});
+
+/**
+ * @route   PATCH /api/users/:username/admin-update
+ * @description (Admin) Actualiza el rol y los strikes de un usuario.
+ * @access  Private (Admin)
+ * @param {string} req.params.username - El nombre de usuario a modificar.
+ * @param {string} [req.body.role] - El nuevo rol para el usuario.
+ * @param {number} [req.body.strikes] - El nuevo número de strikes.
+ * @returns {object} 200 - El objeto del usuario actualizado.
+ */
+app.patch('/api/users/:username/admin-update', isAuthenticated, isModeratorOrAdmin, async (req, res) => {
+    try {
+        const { username } = req.params;
+        const { role, strikes, userStatus } = req.body;
+        const requesterRole = req.userRole; // Rol del usuario que hace la petición (admin/moderador)
+
+        const userToUpdate = await User.findOne({ username: username });
+        if (!userToUpdate) {
+            return res.status(404).json({ message: 'Usuario a actualizar no encontrado.' });
+        }
+        
+        const updateData = {};
+
+        // --- Lógica de Permisos ---
+        // Los moderadores solo pueden cambiar los strikes.
+        if (strikes !== undefined) {
+            const strikesAsNumber = Number(strikes);
+            if (isNaN(strikesAsNumber) || strikesAsNumber < 0) {
+                return res.status(400).json({ message: 'Los strikes deben ser un número no negativo.' });
+            }
+            updateData.strikes = strikesAsNumber;
+        }
+
+        // Solo los administradores pueden cambiar el rol y el estado.
+        if (requesterRole === 'admin') {
+            if (role) {
+                const validRoles = ['user', 'moderator', 'admin'];
+                if (!validRoles.includes(role)) {
+                    return res.status(400).json({ message: 'El rol proporcionado no es válido.' });
+                }
+                updateData.role = role;
+            }
+            if (userStatus) {
+                const validStatuses = ['active', 'verified', 'banned'];
+                if (!validStatuses.includes(userStatus)) {
+                    return res.status(400).json({ message: 'El estado proporcionado no es válido.' });
+                }
+                updateData.userStatus = userStatus;
+            }
+        }
+        
+        if (Object.keys(updateData).length === 0) {
+            return res.status(400).json({ message: 'No se proporcionaron datos válidos para actualizar.' });
+        }
+
+        // Aplicar las actualizaciones
+        const updatedUser = await User.findOneAndUpdate(
+            { username: username },
+            { $set: updateData },
+            { new: true }
+        ).select('firstName lastName username description profilePicturePath createdAt role strikes userStatus');
+        
+        res.status(200).json({ message: 'Usuario actualizado correctamente.', user: updatedUser });
+
+    } catch (error) {
+        console.error(`Error en PATCH /api/users/${req.params.username}/admin-update:`, error);
+        res.status(500).json({ message: 'Error en el servidor al actualizar el usuario.' });
     }
 });
 

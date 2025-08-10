@@ -382,40 +382,166 @@ async function renderPage(path) {
         templatePath = './templates/login.html';
         document.title = 'Iniciar Sesión';
     } else if (path.startsWith('/view-profile')) {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const username = params.get('username');
+        if (!username) throw new Error('Nombre de usuario no especificado en la URL.');
 
+        // --- 1. Comprobar el rol del visitante (quien está viendo el perfil) ---
+        let viewerRole = null;
         try {
-            const params = new URLSearchParams(window.location.search);
-            const username = params.get('username');
-            if (!username) throw new Error('Nombre de usuario no especificado en la URL.');
-            
-            const response = await fetch(`/api/users/username/${encodeURIComponent(username)}`);
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'No se pudieron cargar los datos del perfil.');
+            const selfProfileResponse = await fetch('/api/profile');
+            if (selfProfileResponse.ok) {
+                const viewerData = await selfProfileResponse.json();
+                viewerRole = viewerData.role;
             }
-            const userData = await response.json();
-            let profileHtml = await fetchTemplate('./templates/view-profile.html');
-            const joinDate = new Date(userData.createdAt).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
+        } catch (e) { /* El visitante no está logueado, viewerRole permanece null */ }
 
-            // Inyecta dinámicamente los datos del usuario en la plantilla.
-            profileHtml = profileHtml
-                .replace(/{{profilePicturePath}}/g, userData.profilePicturePath || '../images/default-avatar.webp')
-                .replace(/{{firstName}}/g, userData.firstName)
-                .replace(/{{lastName}}/g, userData.lastName)
-                .replace(/{{username}}/g, userData.username)
-                .replace(/{{description}}/g, userData.description || 'Este usuario aún no ha añadido una descripción.')
-                .replace(/{{createdAt}}/g, joinDate);
+        // --- 2. Construir la URL de la API dinámicamente ---
+        let apiUrl = `/api/users/username/${encodeURIComponent(username)}`;
+        // Si el visitante es mod o admin, solicitamos los datos de moderación
+        if (viewerRole === 'admin' || viewerRole === 'moderator') {
+            apiUrl += '?include_moderation=true';
+        }
 
-            appRoot.innerHTML = profileHtml;
-            document.title = `Perfil de ${userData.username}`;
-            templatePath = ''; // No se requiere cargar script ni plantilla adicional.
+        // --- 3. Realizar una ÚNICA llamada a la API para obtener los datos del perfil ---
+        const userResponse = await fetch(apiUrl);
+        if (!userResponse.ok) {
+            const errorData = await userResponse.json();
+            throw new Error(errorData.message || 'No se pudieron cargar los datos del perfil.');
+        }
+        const userData = await userResponse.json();
+
+        // --- 4. Renderizar la plantilla con los datos correctos ---
+        let profileHtml = await fetchTemplate('./templates/view-profile.html');
+        const joinDate = new Date(userData.createdAt).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
+        
+        profileHtml = profileHtml
+            .replace(/{{profilePicturePath}}/g, userData.profilePicturePath || '../images/default-avatar.webp')
+            .replace(/{{firstName}}/g, userData.firstName)
+            .replace(/{{lastName}}/g, userData.lastName)
+            .replace(/{{username}}/g, userData.username)
+            .replace(/{{description}}/g, userData.description || 'Este usuario aún no ha añadido una descripción.')
+            .replace(/{{createdAt}}/g, joinDate);
+
+        let adminControlsHtml = '';
+        let moderationInfoHtml = '';
+        
+        if (viewerRole === 'admin' || viewerRole === 'moderator') {
+            moderationInfoHtml = `
+                <br>
+                <div class="moderation-details">
+                    <span class="role-badge">ROL: ${userData.role || 'user'}</span>
+                    <span class="status-badge status-${userData.userStatus || 'active'}">ESTADO: ${userData.userStatus || 'active'}</span>
+                    <span class="strikes-badge">STRIKES: ${userData.strikes !== undefined ? userData.strikes : 0}</span>
+                </div>
+            `;
+        }
+
+        if (viewerRole === 'admin') {
+            adminControlsHtml = `
+                <div class="admin-form-wrapper">
+                    <h3>Panel de Administrador</h3>
+                    <form id="admin-edit-form">
+                         <div class="form-group-inline">
+                            <label for="role-select">Rol:</label>
+                            <select id="role-select" name="role">
+                                <option value="user" ${userData.role === 'user' ? 'selected' : ''}>Usuario</option>
+                                <option value="moderator" ${userData.role === 'moderator' ? 'selected' : ''}>Moderador</option>
+                                <option value="admin" ${userData.role === 'admin' ? 'selected' : ''}>Admin</option>
+                            </select>
+                        </div>
+                        <div class="form-group-inline">
+                            <label for="status-select">Estado:</label>
+                            <select id="status-select" name="userStatus">
+                                <option value="active" ${userData.userStatus === 'active' || !userData.userStatus ? 'selected' : ''}>Activo</option>
+                                <option value="banned" ${userData.userStatus === 'banned' ? 'selected' : ''}>Baneado</option>
+                            </select>
+                        </div>
+                        <div class="form-group-inline">
+                            <label for="strikes-input">Strikes:</label>
+                            <input type="number" id="strikes-input" name="strikes" value="${userData.strikes !== undefined ? userData.strikes : 0}" min="0">
+                        </div>
+                        <p id="admin-form-message" class="message-info hidden"></p>
+                        <button type="submit" class="button-primary">Guardar Cambios Admin</button>
+                    </form>
+                </div>`;
+        } else if (viewerRole === 'moderator') {
+             adminControlsHtml = `
+                <div class="admin-form-wrapper">
+                    <h3>Panel de Moderador</h3>
+                    <form id="admin-edit-form">
+                        <div class="form-group-inline">
+                            <label for="strikes-input">Strikes:</label>
+                            <input type="number" id="strikes-input" name="strikes" value="${userData.strikes !== undefined ? userData.strikes : 0}" min="0">
+                        </div>
+                        <p id="admin-form-message" class="message-info hidden"></p>
+                        <button type="submit" class="button-primary">Actualizar Strikes</button>
+                    </form>
+                </div>`;
+        }
+
+        profileHtml = profileHtml
+            .replace('{{moderationInfo}}', moderationInfoHtml)
+            .replace('{{adminControls}}', adminControlsHtml);
+
+        appRoot.innerHTML = profileHtml;
+        document.title = `Perfil de ${userData.username}`;
+        
+        if (viewerRole === 'admin' || viewerRole === 'moderator') {
+            const adminForm = document.getElementById('admin-edit-form');
+            if (adminForm) {
+                adminForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const messageEl = document.getElementById('admin-form-message');
+                    messageEl.classList.add('hidden');
+                    
+                    const formData = new FormData(adminForm);
+                    const data = Object.fromEntries(formData.entries());
+
+                    try {
+                        const response = await fetch(`/api/users/${username}/admin-update`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(data)
+                        });
+                        const result = await response.json();
+                        if (!response.ok) {
+                            throw new Error(result.message || 'Error al actualizar.');
+                        }
+
+                        messageEl.textContent = result.message;
+                        messageEl.classList.remove('error-text');
+                        messageEl.classList.add('success-text');
+                        messageEl.classList.remove('hidden');
+
+                        const modInfoContainer = document.getElementById('moderation-info-display');
+                        if (modInfoContainer) {
+                             modInfoContainer.innerHTML = `
+                                <br>
+                                <div class="moderation-details">
+                                    <span class="role-badge">ROL: ${result.user.role}</span>
+                                    <span class="status-badge status-${result.user.userStatus}">ESTADO: ${result.user.userStatus}</span>
+                                    <span class="strikes-badge">STRIKES: ${result.user.strikes}</span>
+                                </div>`;
+                        }
+                    } catch (error) {
+                        messageEl.textContent = error.message;
+                        messageEl.classList.remove('success-text');
+                        messageEl.classList.add('error-text');
+                        messageEl.classList.remove('hidden');
+                    }
+                });
+            }
+        }
+        
+        templatePath = '';
 
         } catch (error) {
             console.error('Error al renderizar el perfil de usuario:', error);
             appRoot.innerHTML = await fetchTemplate('./templates/error-404.html');
             document.title = 'ERROR 404';
         }
-    
     } else if (path.startsWith('/profile')) {
         try {
             const response = await fetch('/api/profile');

@@ -247,3 +247,124 @@
 .profile-modal-error-text:not(.hidden) {
     display: block;
 }
+
+
+/* =================================================================
+   ESTILOS PARA EL PANEL DE ADMINISTRACIÓN Y MODERACIÓN
+   ================================================================= */
+
+/* --- Contenedor de Información de Moderación (Insignias) --- */
+.moderation-details {
+    display: flex;
+    flex-wrap: wrap; /* Permite que las insignias pasen a la siguiente línea en pantallas pequeñas */
+    justify-content: center;
+    gap: 0.75rem; /* Espacio entre insignias */
+    margin-top: 0.5rem;
+}
+
+/* Estilo base para todas las insignias */
+.role-badge, .status-badge, .strikes-badge {
+    padding: 0.25em 0.6em;
+    font-size: 0.85em;
+    font-weight: bold;
+    border-radius: 15px; /* Bordes redondeados para una apariencia de píldora */
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Colores específicos para cada tipo de insignia */
+.role-badge { background-color: hsla(var(--tono-primario), var(--saturacion-primaria), 45%, 0.8); color: white; }
+.status-badge.status-active { background-color: hsl(130, 60%, 40%); color: white; }
+.status-badge.status-banned { background-color: hsl(0, 70%, 50%); color: white; }
+.strikes-badge { background-color: hsl(35, 85%, 55%); color: white; }
+
+
+/* --- Contenedor y Formulario del Panel --- */
+.admin-form-wrapper {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid hsla(var(--tono-neutro), var(--saturacion-neutra), 50%, 0.2);
+}
+
+.admin-form-wrapper h3 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    font-size: 1.5rem; /* Tamaño coherente con otros subtítulos */
+    color: var(--color-texto);
+}
+
+#admin-edit-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem; /* Espacio entre los grupos de formulario */
+    max-width: 350px;
+    margin: 0 auto; /* Centra el formulario dentro del wrapper */
+}
+
+/* Grupo para alinear etiqueta e input en la misma línea */
+.form-group-inline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between; /* Alinea la etiqueta a la izquierda y el input a la derecha */
+    gap: 1rem;
+}
+
+.form-group-inline label {
+    font-weight: bold;
+    color: var(--color-texto-secundario);
+    flex-shrink: 0; /* Evita que la etiqueta se encoja */
+}
+
+/* Estilo para los inputs y selects del panel, basado en forms.css */
+#admin-edit-form input[type="number"],
+#admin-edit-form select {
+    padding: 8px 12px;
+    background-color: var(--color-fondo-input);
+    color: var(--color-texto-input);
+    border: 1px solid var(--color-borde);
+    border-radius: 5px;
+    font-size: 1em;
+    width: 60%; /* Ocupa el espacio restante */
+    box-sizing: border-box;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+#admin-edit-form input[type="number"]:focus,
+#admin-edit-form select:focus {
+    outline: none;
+    border-color: var(--color-enlace);
+    box-shadow: 0 0 0 3px var(--color-foco-primario);
+}
+
+#admin-edit-form button[type="submit"] {
+    margin-top: 10px;
+    background-color: var(--color-enlace);
+    color: hsl(var(--tono-primario), 15%, 95%);
+    border: none;
+    font-weight: bold;
+    padding: 12px;
+    font-size: 1em;
+    transition: transform 0.2s, background-color 0.2s;
+    cursor: pointer;
+}
+
+#admin-edit-form button[type="submit"]:hover {
+    background-color: hsl(var(--tono-primario), var(--saturacion-primaria), 55%);
+    transform: translateY(-2px);
+}
+
+/* Mensajes de feedback (éxito/error) */
+#admin-form-message {
+    text-align: center;
+    font-weight: bold;
+    padding: 0.5rem;
+    border-radius: 4px;
+}
+.message-info.success-text {
+    background-color: hsl(130, 70%, 90%);
+    color: hsl(130, 70%, 20%);
+}
+.message-info.error-text {
+    background-color: hsl(0, 80%, 92%);
+    color: hsl(0, 60%, 40%);
+}
