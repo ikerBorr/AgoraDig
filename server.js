@@ -27,34 +27,42 @@ const helmet = require('helmet');
 
 
 // =================================================================
-//  FUNCIONES DE AYUDA
+//  FUNCIONES DE AYUDA (HELPERS)
 // =================================================================
 
+/**
+ * @constant {string} DEFAULT_AVATAR_PATH - Ruta a la imagen de perfil por defecto.
+ * @description Se usa como fallback cuando un usuario no tiene imagen o la ruta está rota.
+ */
 const DEFAULT_AVATAR_PATH = 'images/default-avatar.webp';
 
 /**
  * Verifica si la ruta de una imagen de perfil existe en el sistema de archivos.
- * Si no existe, devuelve la ruta de la imagen por defecto para evitar enlaces rotos.
- * @param {string} picturePath - La ruta de la imagen guardada en la BD.
+ * Si no existe, devuelve la ruta de la imagen por defecto para evitar enlaces rotos en el cliente.
+ * @param {string} picturePath - La ruta de la imagen guardada en la base de datos del usuario.
  * @returns {string} Una ruta de imagen válida y segura para ser servida al cliente.
  */
 function getValidProfilePicturePath(picturePath) {
+    // Si la ruta es nula o indefinida, retorna inmediatamente el avatar por defecto.
     if (!picturePath) {
         return DEFAULT_AVATAR_PATH;
     }
 
     let finalCheckPath;
 
+    // Construye la ruta absoluta para la verificación, considerando si es una subida o un asset público.
     if (picturePath.startsWith('uploads/')) {
         finalCheckPath = path.join(__dirname, picturePath);
     } else {
         finalCheckPath = path.join(__dirname, 'public', picturePath);
     }
-
+    
+    // Devuelve la ruta original solo si el archivo existe físicamente.
     if (fs.existsSync(finalCheckPath)) {
         return picturePath;
     }
     
+    // Si no, devuelve la ruta del avatar por defecto.
     return DEFAULT_AVATAR_PATH;
 }
 
@@ -65,11 +73,13 @@ function getValidProfilePicturePath(picturePath) {
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Medida de seguridad crítica: la aplicación no debe iniciar sin un secreto de sesión.
 if (!process.env.SESSION_SECRET) {
     console.error('FATAL ERROR: La variable de entorno SESSION_SECRET no está definida.');
-    process.exit(1);
+    process.exit(1); // Termina el proceso si la configuración esencial falta.
 }
 
+// Confía en el primer proxy. Necesario si la app corre detrás de un reverse proxy (ej. Nginx, Heroku).
 app.set('trust proxy', 1);
 
 
@@ -77,28 +87,34 @@ app.set('trust proxy', 1);
 //  MIDDLEWARE
 // =================================================================
 
+// Aplica cabeceras de seguridad HTTP básicas.
 app.use(helmet());
+// Parsea cuerpos de petición con formato JSON.
 app.use(express.json());
+// Sirve estáticamente los archivos subidos (fotos de perfil).
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const mongoUrl = process.env.MONGODB_URI || 'mongodb://localhost:27017/AgoraDig_BD';
+
+// Configuración de la sesión de usuario, almacenada en MongoDB para persistencia.
 app.use(session({
     secret: process.env.SESSION_SECRET,
     resave: false,
-    saveUninitialized: false,
+    saveUninitialized: false, // No crear sesiones hasta que algo se almacene.
     store: MongoStore.create({ mongoUrl: mongoUrl }),
     cookie: {
-        maxAge: 1000 * 60 * 60 * 24 * 14,
-        secure: process.env.NODE_ENV === 'production',
-        httpOnly: true,
-        sameSite: 'lax'
+        maxAge: 1000 * 60 * 60 * 24 * 14, // Duración de la cookie: 14 días.
+        secure: process.env.NODE_ENV === 'production', // Usar cookies seguras solo en producción (HTTPS).
+        httpOnly: true, // Previene acceso a la cookie desde JavaScript en el cliente.
+        sameSite: 'lax' // Protección CSRF básica.
     }
 }));
 
+// Sirve los archivos estáticos del frontend (HTML, CSS, JS del cliente).
 app.use(express.static(path.join(__dirname, 'public')));
 
 /**
- * Middleware para verificar si un usuario autenticado tiene el rol de 'moderator' o 'admin'.
+ * Middleware de autorización para verificar si un usuario autenticado tiene el rol de 'moderator' o 'admin'.
  * Rechaza la petición si el usuario no tiene los privilegios adecuados.
  * @param {import('express').Request} req - Objeto de la petición de Express.
  * @param {import('express').Response} res - Objeto de la respuesta de Express.
@@ -108,7 +124,7 @@ const isModeratorOrAdmin = async (req, res, next) => {
     try {
         const user = await User.findById(req.session.userId).select('role');
         if (user && (user.role === 'admin' || user.role === 'moderator')) {
-            req.userRole = user.role; 
+            req.userRole = user.role; // Adjunta el rol a la petición para uso posterior.
             next();
         } else {
             res.status(403).json({ message: 'Acceso denegado. Se requieren privilegios de moderación.' });
@@ -143,12 +159,13 @@ const sensitiveRouteLimiter = rateLimit({
     message: 'Demasiadas peticiones a esta ruta, por favor intente de nuevo más tarde.'
 });
 
+// Aplica el limitador global a todas las peticiones.
 app.use(DoSLimiter);
 
 /**
- * Middleware para verificar si un usuario está autenticado.
+ * Middleware de autenticación para verificar si un usuario tiene una sesión activa.
  * Comprueba la existencia de `req.session.userId`. Si no existe, rechaza la
- * petición con un estado 401.
+ * petición con un estado 401 (No Autorizado).
  * @param {import('express').Request} req - Objeto de la petición de Express.
  * @param {import('express').Response} res - Objeto de la respuesta de Express.
  * @param {import('express').NextFunction} next - Función callback para pasar al siguiente middleware.
@@ -192,7 +209,7 @@ const userSchema = new mongoose.Schema({
     /** @property {Number} strikes - Contador de infracciones. Usado para moderación. */
     strikes: { type: Number, default: 0 }
 }, {
-    timestamps: true,
+    timestamps: true, // Añade automáticamente los campos createdAt y updatedAt.
 });
 
 const User = mongoose.model('User', userSchema);
@@ -204,7 +221,7 @@ const User = mongoose.model('User', userSchema);
 const upload = multer({
   dest: 'uploads/',
   limits: {
-    fileSize: 2 * 1024 * 1024
+    fileSize: 2 * 1024 * 1024 // 2 Megabytes
   }
 });
 
@@ -223,13 +240,14 @@ const messageSchema = new mongoose.Schema({
     messageStatus: { type: String, enum: ['active', 'deleted', 'deletedByModerator'], default: 'active', index: true }
 }, {
     timestamps: true,
-    toJSON: { virtuals: true },
+    toJSON: { virtuals: true }, // Asegura que los campos virtuales se incluyan en las respuestas JSON.
     toObject: { virtuals: true }
 });
 
+// Índice compuesto para optimizar las consultas más comunes del feed de mensajes.
 messageSchema.index({ messageStatus: 1, createdAt: -1 });
 
-/** @property {Number} likeCount - Campo virtual que calcula el número de 'likes' en tiempo de ejecución. */
+/** @property {Number} likeCount - Campo virtual que calcula el número de 'likes' en tiempo de ejecución sin almacenarlo en la BD. */
 messageSchema.virtual('likeCount').get(function() { return this.likes.length; });
 const Message = mongoose.model('Message', messageSchema);
 
@@ -275,7 +293,7 @@ app.post('/login', sensitiveRouteLimiter, async (req, res) => {
             return res.status(401).json({ errors: { password: 'La contraseña es incorrecta.' } });
         }
 
-        req.session.userId = user._id;
+        req.session.userId = user._id; // Crea la sesión para el usuario.
 
         res.status(200).json({ message: 'Inicio de sesión exitoso.' });
 
@@ -289,13 +307,16 @@ app.post('/login', sensitiveRouteLimiter, async (req, res) => {
  * @route   POST /register
  * @description Registra un nuevo usuario, incluyendo la subida y procesamiento de imagen de perfil.
  * @access  Public
- * @param   {object} req.body - Datos del formulario de registro.
+ * @param   {object} req.body - Datos del formulario de registro (multipart/form-data).
  * @param   {Express.Multer.File} req.file - Archivo de imagen de perfil subido.
  * @returns {object} 201 - Éxito con el ID de usuario y el PIN de recuperación.
  * @returns {object} 4xx - Errores de validación, conflicto o tamaño de archivo.
  * @returns {object} 500 - Error del servidor.
  */
 app.post('/register',
+    // El limitador de peticiones se aplica ANTES de procesar el archivo para prevenir DoS con subidas de archivos.
+    sensitiveRouteLimiter,
+    // Middleware de Multer para manejar la subida del archivo.
     (req, res, next) => {
         upload.single('profilePicture')(req, res, (err) => {
             if (err instanceof multer.MulterError) {
@@ -309,7 +330,7 @@ app.post('/register',
             next();
         });
     },
-    sensitiveRouteLimiter,
+    // Controlador principal de la ruta.
     async (req, res) => {
 
     const tempFile = req.file;
@@ -321,12 +342,14 @@ app.post('/register',
             description, acceptsPublicity
         } = req.body;
 
+        // Función auxiliar para limpiar el archivo temporal en caso de error.
         const cleanupTempFile = () => {
             if (tempFile && fs.existsSync(tempFile.path)) {
                 fs.unlinkSync(tempFile.path);
             }
         };
 
+        // --- Inicio de la Validación de Datos ---
         if (!firstName || !lastName || !username || !email || !password || !confirmPassword || !dateOfBirth || !tempFile) {
             cleanupTempFile();
             return res.status(400).json({ errors: { general: 'Faltan campos por rellenar.' } });
@@ -373,13 +396,16 @@ app.post('/register',
             cleanupTempFile();
             return res.status(400).json({ errors: { dateOfBirth: 'La fecha de nacimiento proporcionada no es válida o eres demasiado joven para registrarte.' }});
         }
+        // --- Fin de la Validación ---
 
+        // Hashing de la contraseña y el PIN de recuperación.
         const salt = await bcrypt.genSalt(12);
         const hashedPassword = await bcrypt.hash(password, salt);
 
         const plainTextRecoveryPIN = crypto.randomBytes(8).toString('hex').toUpperCase();
         const hashedRecoveryPIN = await bcrypt.hash(plainTextRecoveryPIN, salt);
 
+        // Creación del nuevo usuario en la base de datos.
         const newUser = new User({
             firstName, lastName, dateOfBirth,
             username, email, password: hashedPassword, recoveryPIN: hashedRecoveryPIN,
@@ -387,6 +413,7 @@ app.post('/register',
         });
         await newUser.save();
 
+        // Procesamiento de la imagen de perfil: redimensionar y convertir a WebP.
         const newFileName = `${newUser._id}.webp`;
         const newPath = path.join(__dirname, 'uploads', newFileName);
 
@@ -395,11 +422,13 @@ app.post('/register',
             .webp({ quality: 80 })
             .toFile(newPath);
 
-        cleanupTempFile();
+        cleanupTempFile(); // Elimina el archivo temporal original.
 
+        // Actualiza el usuario con la ruta de su nueva foto de perfil.
         newUser.profilePicturePath = `uploads/${newFileName}`;
         await newUser.save();
 
+        // Envía la respuesta de éxito.
         res.status(201).json({
             message: '¡Usuario registrado con éxito! Se ha generado un PIN de recuperación único. Anótelo en un lugar seguro para poder recuperar su cuenta en caso de pérdida.',
             userId: newUser._id,
@@ -407,10 +436,12 @@ app.post('/register',
         });
 
     } catch (error) {
+        // Limpia el archivo temporal si se produce un error en cualquier punto.
         if (tempFile && fs.existsSync(tempFile.path)) {
             fs.unlinkSync(tempFile.path);
         }
-
+        
+        // Manejo de errores de validación de Mongoose.
         if (error.name === 'ValidationError') {
             const errors = {};
             for (let field in error.errors) {
@@ -418,10 +449,14 @@ app.post('/register',
             }
             return res.status(400).json({ errors });
         }
-
+        
+        // Manejo de errores de duplicidad (código 11000 de MongoDB).
         if (error.code === 11000) {
-            if (error.keyPattern.username) return res.status(409).json({ errors: { username: 'Este nombre de usuario ya existe.' }});
-            if (error.keyPattern.email) return res.status(409).json({ errors: { email: 'Este email ya está registrado.' }});
+            // Se unifica el mensaje para evitar la enumeración de usuarios/emails.
+            if (error.keyPattern.username || error.keyPattern.email) {
+                 return res.status(409).json({ errors: { general: 'El nombre de usuario o el email ya están en uso. Por favor, elige otros diferentes.' }});
+            }
+            // Error poco común pero posible si hay colisión de PIN.
             if (error.keyPattern.recoveryPIN) return res.status(500).json({ message: 'Error al generar datos únicos. Inténtalo de nuevo.' });
         }
 
@@ -433,7 +468,7 @@ app.post('/register',
 /**
  * @route   POST /logout
  * @description Cierra la sesión del usuario actual destruyendo la sesión en el servidor.
- * @access  Private (implícito)
+ * @access  Private (implícito por requerir una sesión para destruir)
  * @returns {object} 200 - Mensaje de éxito.
  * @returns {object} 500 - Error al destruir la sesión.
  */
@@ -443,7 +478,7 @@ app.post('/logout', (req, res) => {
             console.error('Error en /logout:', err);
             return res.status(500).json({ message: 'No se pudo cerrar la sesión.' });
         }
-        res.clearCookie('connect.sid');
+        res.clearCookie('connect.sid'); // Limpia la cookie de sesión del cliente.
         res.status(200).json({ message: 'Sesión cerrada con éxito.' });
     });
 });
@@ -462,20 +497,18 @@ app.post('/logout', (req, res) => {
  * @returns {object} 404 - Usuario no encontrado.
  * @returns {object} 500 - Error del servidor.
  */
-app.get('/api/profile', async (req, res) => {
-    if (!req.session.userId) {
-        return res.status(401).json({ message: 'No autenticado. Por favor, inicie sesión.' });
-    }
-
+app.get('/api/profile', isAuthenticated, async (req, res) => {
     try {
         const user = await User.findById(req.session.userId)
             .select('firstName lastName username email description profilePicturePath role userStatus createdAt');
 
         if (!user) {
+            // Si el usuario no se encuentra, destruye la sesión corrupta por seguridad.
             req.session.destroy();
             return res.status(404).json({ message: 'Usuario no encontrado.' });
         }
 
+        // Asegura que la ruta de la imagen de perfil sea válida.
         user.profilePicturePath = getValidProfilePicturePath(user.profilePicturePath);
 
         res.status(200).json(user);
@@ -506,7 +539,8 @@ app.patch('/api/profile', isAuthenticated, async (req, res) => {
         if (!username && description === undefined) {
             return res.status(400).json({ message: 'No se proporcionaron datos para actualizar.' });
         }
-
+        
+        // --- Validación de los datos de entrada ---
         const errors = {};
         if (username && (username.length < 3 || username.length > 20)) {
             errors.username = 'El nombre de usuario debe tener entre 3 y 20 caracteres.';
@@ -519,6 +553,7 @@ app.patch('/api/profile', isAuthenticated, async (req, res) => {
             return res.status(400).json({ errors });
         }
 
+        // Verifica si el nuevo nombre de usuario ya está en uso por otro usuario.
         if (username) {
             const existingUser = await User.findOne({ username: username, _id: { $ne: userId } });
             if (existingUser) {
@@ -533,7 +568,7 @@ app.patch('/api/profile', isAuthenticated, async (req, res) => {
         const updatedUser = await User.findByIdAndUpdate(
             userId,
             { $set: updateData },
-            { new: true, runValidators: true }
+            { new: true, runValidators: true } // `new: true` devuelve el documento actualizado.
         ).select('firstName lastName username email description profilePicturePath role createdAt');
 
         if (!updatedUser) {
@@ -578,10 +613,11 @@ app.get('/api/messages', async (req, res) => {
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit)
-            .populate('sender', 'username profilePicturePath')
-            .lean();
+            .populate('sender', 'username profilePicturePath') // Obtiene datos del autor.
+            .lean(); // Usa .lean() para obtener objetos JS planos, más rápido para lectura.
 
         messages = messages.map(message => {
+            // Maneja el caso de que el usuario emisor haya sido eliminado.
             if (message.sender) {
                 message.sender.profilePicturePath = getValidProfilePicturePath(message.sender.profilePicturePath);
             } else {
@@ -590,6 +626,7 @@ app.get('/api/messages', async (req, res) => {
                     profilePicturePath: DEFAULT_AVATAR_PATH
                 };
             }
+            // Añade un campo booleano `isLiked` para que el frontend sepa si mostrar el like como activo.
             const isLiked = req.session.userId ? message.likes.some(like => like.toString() === req.session.userId.toString()) : false;
 
             return { ...message, isLiked };
@@ -626,6 +663,7 @@ app.post('/api/messages', isAuthenticated, async (req, res) => {
     try {
         const { title, content, hashtags } = req.body;
 
+        // Comprueba si el usuario está baneado antes de permitirle publicar.
         const user = await User.findById(req.session.userId).select('userStatus');
         if (!user) {
             return res.status(404).json({ message: 'Usuario no encontrado.' });
@@ -634,6 +672,7 @@ app.post('/api/messages', isAuthenticated, async (req, res) => {
             return res.status(403).json({ message: 'Tu cuenta ha sido suspendida. No puedes publicar mensajes.' });
         }
 
+        // --- Validación del contenido del mensaje ---
         if (!title || title.trim().length === 0) {
             return res.status(400).json({ message: 'El título es obligatorio.' });
         }
@@ -647,6 +686,7 @@ app.post('/api/messages', isAuthenticated, async (req, res) => {
             return res.status(400).json({ message: 'El contenido no puede exceder los 1500 caracteres.' });
         }
 
+        // Parsea los hashtags de una cadena de texto a un array.
         const parsedHashtags = hashtags ? hashtags.match(/#(\w+)/g)?.map(h => h.substring(1)) || [] : [];
 
         const newMessage = new Message({
@@ -691,17 +731,20 @@ app.post('/api/messages/:id/like', isAuthenticated, async (req, res) => {
         if (!message) {
             return res.status(404).json({ message: 'Mensaje no encontrado.' });
         }
-
+        
+        // Comprueba si el usuario ya ha dado 'like'.
         const hasLiked = message.likes.some(like => like.equals(userId));
         let updatedMessage;
 
         if (hasLiked) {
+            // Si ya le dio like, se lo quita ($pull).
             updatedMessage = await Message.findByIdAndUpdate(
                 messageId,
                 { $pull: { likes: userId } },
                 { new: true }
             );
         } else {
+            // Si no le ha dado like, se lo añade ($addToSet para evitar duplicados).
             updatedMessage = await Message.findByIdAndUpdate(
                 messageId,
                 { $addToSet: { likes: userId } },
@@ -711,7 +754,7 @@ app.post('/api/messages/:id/like', isAuthenticated, async (req, res) => {
 
         res.status(200).json({
             likeCount: updatedMessage.likeCount,
-            isLiked: !hasLiked
+            isLiked: !hasLiked // Devuelve el nuevo estado del 'like'.
         });
 
     } catch (error) {
@@ -722,7 +765,7 @@ app.post('/api/messages/:id/like', isAuthenticated, async (req, res) => {
 
 /**
  * @route   GET /api/messages/counts
- * @description Obtiene los contadores de likes para una lista de mensajes. Usado para polling.
+ * @description Obtiene los contadores de likes para una lista de mensajes. Usado para polling desde el frontend.
  * @access  Public
  * @param {object} req.query - Parámetros de la consulta.
  * @param {string} req.query.ids - Una cadena de IDs de mensajes separados por coma.
@@ -741,8 +784,9 @@ app.get('/api/messages/counts', async (req, res) => {
 
         const messages = await Message.find({
             '_id': { $in: messageIds }
-        }).select('_id likes');
+        }).select('_id likes'); // Selecciona solo los campos necesarios para optimizar.
 
+        // Crea un mapa de ID -> likeCount.
         const counts = messages.reduce((acc, msg) => {
             acc[msg._id] = msg.likeCount;
             return acc;
@@ -773,6 +817,7 @@ app.get('/api/users/username/:username', async (req, res) => {
         let fieldsToSelect = 'firstName lastName username description profilePicturePath createdAt role userStatus';
         let requesterIsModeratorOrAdmin = false;
 
+        // Si se solicita información de moderación y el usuario está logueado, verifica sus permisos.
         if (req.query.include_moderation === 'true' && req.session.userId) {
             const requester = await User.findById(req.session.userId).select('role');
             if (requester && (requester.role === 'admin' || requester.role === 'moderator')) {
@@ -780,6 +825,7 @@ app.get('/api/users/username/:username', async (req, res) => {
             }
         }
 
+        // Si tiene permisos, añade los campos de moderación a la consulta.
         if (requesterIsModeratorOrAdmin) {
             fieldsToSelect += ' strikes';
         }
@@ -823,8 +869,24 @@ app.patch('/api/users/:username/admin-update', isAuthenticated, isModeratorOrAdm
             return res.status(404).json({ message: 'Usuario a actualizar no encontrado.' });
         }
         
+        // --- Controles de Jerarquía y Seguridad ---
+        // Previene que un moderador o admin se modifique a sí mismo.
+        if (userToUpdate._id.toString() === req.session.userId) {
+            return res.status(403).json({ message: 'No puedes realizar acciones de moderación sobre tu propia cuenta.' });
+        }
+        // Previene que un admin modifique a otro admin.
+        if (requesterRole === 'admin' && userToUpdate.role === 'admin') {
+            return res.status(403).json({ message: 'Un administrador no puede modificar a otro administrador.' });
+        }
+        // Previene que un moderador modifique a otros moderadores o a administradores.
+        if (requesterRole === 'moderator' && (userToUpdate.role === 'admin' || userToUpdate.role === 'moderator')) {
+            return res.status(403).json({ message: 'Los moderadores no tienen permisos para modificar a otros moderadores o administradores.' });
+        }
+        // --- Fin de los Controles ---
+
         const updateData = {};
 
+        // Los moderadores y admins pueden actualizar los strikes.
         if (strikes !== undefined) {
             const strikesAsNumber = Number(strikes);
             if (isNaN(strikesAsNumber) || strikesAsNumber < 0) {
@@ -832,7 +894,8 @@ app.patch('/api/users/:username/admin-update', isAuthenticated, isModeratorOrAdm
             }
             updateData.strikes = strikesAsNumber;
         }
-
+        
+        // Solo los administradores pueden cambiar roles y estados.
         if (requesterRole === 'admin') {
             if (role) {
                 const validRoles = ['user', 'moderator', 'admin'];
@@ -874,7 +937,8 @@ app.patch('/api/users/:username/admin-update', isAuthenticated, isModeratorOrAdm
 
 /**
  * @description Ruta "catch-all" que redirige cualquier petición GET no reconocida
- * a la página principal del frontend. Esencial para el funcionamiento de SPAs.
+ * a la página principal del frontend. Esencial para el funcionamiento de SPAs,
+ * ya que permite que el enrutador del lado del cliente maneje las rutas.
  */
 app.get('*', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
 
