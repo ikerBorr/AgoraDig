@@ -216,12 +216,12 @@ const User = mongoose.model('User', userSchema);
 
 /**
  * @description Configuración de Multer para la gestión de subida de archivos.
- * Almacena temporalmente los archivos en 'uploads/' y limita su tamaño a 2MB.
+ * Almacena temporalmente los archivos en 'uploads/' y limita su tamaño a 4MB.
  */
 const upload = multer({
   dest: 'uploads/',
   limits: {
-    fileSize: 2 * 1024 * 1024 // 2 Megabytes
+    fileSize: 4 * 1024 * 1024 // 2 Megabytes
   }
 });
 
@@ -321,7 +321,7 @@ app.post('/register',
         upload.single('profilePicture')(req, res, (err) => {
             if (err instanceof multer.MulterError) {
                 if (err.code === 'LIMIT_FILE_SIZE') {
-                    return res.status(413).json({ message: 'El archivo es demasiado grande. El límite es de 2MB.' });
+                    return res.status(413).json({ message: 'El archivo es demasiado grande. El límite es de 4MB.' });
                 }
                 return res.status(400).json({ message: `Error al subir el archivo: ${err.message}` });
             } else if (err) {
