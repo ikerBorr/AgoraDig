@@ -3,16 +3,16 @@
     <form id="registerForm">
         <div class="input-group">
             <input type="text" name="firstName" placeholder="Nombre" required>
-            <div class="error-message"></div> </div>
+            <div class="error-message"></div>
+        </div>
         <div class="input-group">
             <input type="text" name="lastName" placeholder="Apellidos" required>
-            <div class="error-message"></div> </div>
-
+            <div class="error-message"></div>
+        </div>
         <div class="input-group">
             <input type="text" name="username" placeholder="Nombre de usuario" required>
             <div class="error-message"></div>
         </div>
-        
         <div class="input-group">
             <input type="email" name="email" placeholder="Email" required>
             <div class="error-message"></div>
@@ -22,12 +22,14 @@
             <div class="error-message"></div>
         </div>
 
-        <div class="input-group">
+        <div class="input-group password-wrapper">
             <input type="password" name="password" placeholder="Contraseña" required>
+            <span class="password-toggle-icon" data-for="password" title="Mostrar/Ocultar contraseña"></span>
             <div class="error-message"></div>
         </div>
-        <div class="input-group">
+        <div class="input-group password-wrapper">
             <input type="password" name="confirmPassword" placeholder="Confirmar Contraseña" required>
+            <span class="password-toggle-icon" data-for="confirmPassword" title="Mostrar/Ocultar contraseña"></span>
             <div class="error-message"></div>
         </div>
         
@@ -49,7 +51,6 @@
         <br>
         <button type="submit">Registrar</button>
         
-        
         <div class="form-group terms-group">
             <input type="checkbox" id="publicity" name="acceptsPublicity">
             <label for="publicity">
@@ -67,10 +68,9 @@
         </div>
     </form>
 
-        <p> 
-            <br>
-            ¿Ya tienes cuenta? <br>
-            <a href="/profile">Iniciar Sesión</a>
-        </p>
-
-</section>  
+    <p> 
+        <br>
+        ¿Ya tienes cuenta? <br>
+        <a href="/login">Iniciar Sesión</a>
+    </p>
+</section>

@@ -3,13 +3,16 @@
     <form id="loginForm">
         <div class="input-group">
             <input type="text" name="loginIdentifier" placeholder="Usuario o Email" required>
-            <div class="error-message"></div> </div>
+            <div class="error-message"></div>
         </div>
         
-        <div class="input-group">
+        <div class="input-group password-wrapper">
             <input type="password" name="password" placeholder="Tu Contraseña" required>
-            <div class="error-message"></div> </div>
+            <span class="password-toggle-icon" title="Mostrar/Ocultar contraseña">
+                </span>
+            <div class="error-message"></div>
         </div>
+
         <div id="message"></div>
         <button type="submit">Entrar</button>
     </form>

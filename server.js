@@ -199,15 +199,16 @@ const userSchema = new mongoose.Schema({
     dateOfBirth: { type: Date, required: true },
     username: { type: String, required: true, unique: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    password: { type: String, required: true, select: false },
-    recoveryPIN: { type: String, required: true, select: false, unique: true },
+    password: { type: String, required: true, select: false }, // No se devuelve en las consultas por defecto.
+    recoveryPIN: { type: String, required: true, select: false, unique: true }, // PIN de recuperación, no se devuelve.
     description: { type: String, trim: true, maxlength: 300, default: '' },
     profilePicturePath: { type: String },
-    acceptsPublicity: { type: Boolean, default: false, index: true },
+    acceptsPublicity: { type: Boolean, default: false, index: true }, // Indexado para búsquedas eficientes.
     role: { type: String, enum: ['user', 'admin', 'moderator'], default: 'user', index: true },
     userStatus: { type: String, enum: ['active', 'verified', 'banned'], default: 'active', index: true },
-    /** @property {Number} strikes - Contador de infracciones. Usado para moderación. */
-    strikes: { type: Number, default: 0 }
+    strikes: { type: Number, default: 0 },
+    loginAttempts: { type: Number, default: 0, select: false }, // Contador de intentos de login fallidos.
+    lockoutUntil: { type: Date, select: false } // Fecha hasta la que la cuenta está bloqueada.
 }, {
     timestamps: true, // Añade automáticamente los campos createdAt y updatedAt.
 });
@@ -221,7 +222,7 @@ const User = mongoose.model('User', userSchema);
 const upload = multer({
   dest: 'uploads/',
   limits: {
-    fileSize: 4 * 1024 * 1024 // 2 Megabytes
+    fileSize: 4 * 1024 * 1024 // 4 Megabytes
   }
 });
 
@@ -231,7 +232,6 @@ const upload = multer({
  */
 const messageSchema = new mongoose.Schema({
     sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-    /** @property {mongoose.Schema.Types.ObjectId} referencedMessage - ID del mensaje respondido. Nulo si es un mensaje raíz. */
     referencedMessage: { type: mongoose.Schema.Types.ObjectId, ref: 'Message', default: null, index: true },
     title: { type: String, required: true, trim: true, maxlength: 100 },
     content: { type: String, required: true, trim: true , maxlength: 1500},
@@ -240,14 +240,14 @@ const messageSchema = new mongoose.Schema({
     messageStatus: { type: String, enum: ['active', 'deleted', 'deletedByModerator'], default: 'active', index: true }
 }, {
     timestamps: true,
-    toJSON: { virtuals: true }, // Asegura que los campos virtuales se incluyan en las respuestas JSON.
+    toJSON: { virtuals: true }, 
     toObject: { virtuals: true }
 });
 
-// Índice compuesto para optimizar las consultas más comunes del feed de mensajes.
+// Índice compuesto para optimizar las consultas de mensajes activos ordenados por fecha.
 messageSchema.index({ messageStatus: 1, createdAt: -1 });
 
-/** @property {Number} likeCount - Campo virtual que calcula el número de 'likes' en tiempo de ejecución sin almacenarlo en la BD. */
+// Campo virtual para calcular el número de 'likes' sin almacenarlo directamente.
 messageSchema.virtual('likeCount').get(function() { return this.likes.length; });
 const Message = mongoose.model('Message', messageSchema);
 
@@ -256,45 +256,79 @@ const Message = mongoose.model('Message', messageSchema);
 //  ROUTES
 // =================================================================
 
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_TIME = 24 * 60 * 60 * 1000; // 24 horas en milisegundos
+
 /**
  * @route   POST /login
- * @description Autentica a un usuario y crea una sesión.
+ * @description Autentica a un usuario y crea una sesión, con lógica de bloqueo de cuenta.
  * @access  Public
- * @param {object} req.body - Cuerpo de la petición.
- * @param {string} req.body.loginIdentifier - El nombre de usuario o email.
- * @param {string} req.body.password - La contraseña.
- * @returns {object} 200 - Mensaje de éxito.
- * @returns {object} 400 - Errores de validación.
- * @returns {object} 401 - Credenciales incorrectas.
- * @returns {object} 500 - Error del servidor.
  */
 app.post('/login', sensitiveRouteLimiter, async (req, res) => {
     try {
         const { loginIdentifier, password } = req.body;
-        const errors = {};
 
-        if (!loginIdentifier) errors.loginIdentifier = 'El campo de usuario o email es obligatorio.';
-        if (!password) errors.password = 'El campo de contraseña es obligatorio.';
-
-        if (Object.keys(errors).length > 0) {
+        // Validación inicial de campos.
+        if (!loginIdentifier || !password) {
+            const errors = {};
+            if (!loginIdentifier) errors.loginIdentifier = 'El campo de usuario o email es obligatorio.';
+            if (!password) errors.password = 'El campo de contraseña es obligatorio.';
             return res.status(400).json({ errors });
         }
 
+        // Busca al usuario por nombre de usuario o email y recupera campos de seguridad.
         const user = await User.findOne({
             $or: [{ username: loginIdentifier }, { email: loginIdentifier.toLowerCase() }]
-        }).select('+password');
+        }).select('+password +loginAttempts +lockoutUntil');
 
+        // Si el usuario no existe, devuelve un error específico.
         if (!user) {
             return res.status(401).json({ errors: { loginIdentifier: 'El usuario o email no existe.' } });
         }
 
+        // Comprueba si la cuenta está bloqueada antes de verificar la contraseña.
+        if (user.lockoutUntil && user.lockoutUntil > Date.now()) {
+            const timeLeftMs = user.lockoutUntil.getTime() - Date.now();
+            const hoursLeft = Math.ceil(timeLeftMs / (1000 * 60 * 60));
+            return res.status(403).json({ 
+                message: `Cuenta bloqueada por demasiados intentos fallidos. Por favor, inténtelo de nuevo en aproximadamente ${hoursLeft} horas.` 
+            });
+        }
+
         const isMatch = await bcrypt.compare(password, user.password);
+
+        // Si la contraseña es incorrecta, se incrementa el contador de intentos.
         if (!isMatch) {
-            return res.status(401).json({ errors: { password: 'La contraseña es incorrecta.' } });
+            user.loginAttempts += 1;
+            
+            // Si se alcanza el límite de intentos, se bloquea la cuenta.
+            if (user.loginAttempts >= MAX_LOGIN_ATTEMPTS) {
+                user.lockoutUntil = new Date(Date.now() + LOCKOUT_TIME);
+                await user.save();
+                return res.status(403).json({ message: 'Demasiados intentos fallidos. Su cuenta ha sido bloqueada por 24 horas por seguridad.' });
+            }
+            
+            await user.save(); // Guarda el intento fallido.
+
+            // Informa del error y los intentos restantes.
+            const remainingAttempts = MAX_LOGIN_ATTEMPTS - user.loginAttempts;
+            const attemptText = remainingAttempts > 1 ? 'intentos' : 'intento';
+            
+            return res.status(401).json({ 
+                errors: { 
+                    password: `La contraseña es incorrecta. Te quedan ${remainingAttempts} ${attemptText}.` 
+                } 
+            });
+        }
+
+        // Si el login es exitoso, se resetea el contador de intentos y el bloqueo.
+        if (user.loginAttempts > 0 || user.lockoutUntil) {
+            user.loginAttempts = 0;
+            user.lockoutUntil = null;
+            await user.save();
         }
 
         req.session.userId = user._id; // Crea la sesión para el usuario.
-
         res.status(200).json({ message: 'Inicio de sesión exitoso.' });
 
     } catch (error) {
@@ -302,6 +336,7 @@ app.post('/login', sensitiveRouteLimiter, async (req, res) => {
         res.status(500).json({ message: 'Error en el servidor.' });
     }
 });
+
 
 /**
  * @route   POST /register
@@ -314,7 +349,7 @@ app.post('/login', sensitiveRouteLimiter, async (req, res) => {
  * @returns {object} 500 - Error del servidor.
  */
 app.post('/register',
-    // El limitador de peticiones se aplica ANTES de procesar el archivo para prevenir DoS con subidas de archivos.
+    // El limitador de peticiones se aplica ANTES de procesar el archivo para prevenir DoS.
     sensitiveRouteLimiter,
     // Middleware de Multer para manejar la subida del archivo.
     (req, res, next) => {
@@ -349,7 +384,7 @@ app.post('/register',
             }
         };
 
-        // --- Inicio de la Validación de Datos ---
+        // --- Validación de Datos ---
         if (!firstName || !lastName || !username || !email || !password || !confirmPassword || !dateOfBirth || !tempFile) {
             cleanupTempFile();
             return res.status(400).json({ errors: { general: 'Faltan campos por rellenar.' } });
@@ -452,7 +487,7 @@ app.post('/register',
         
         // Manejo de errores de duplicidad (código 11000 de MongoDB).
         if (error.code === 11000) {
-            // Se unifica el mensaje para evitar la enumeración de usuarios/emails.
+            // Unifica el mensaje para evitar la enumeración de usuarios/emails.
             if (error.keyPattern.username || error.keyPattern.email) {
                  return res.status(409).json({ errors: { general: 'El nombre de usuario o el email ya están en uso. Por favor, elige otros diferentes.' }});
             }
