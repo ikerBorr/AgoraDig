@@ -556,77 +556,131 @@ app.get('/api/profile', isAuthenticated, async (req, res) => {
 
 /**
  * @route   PATCH /api/profile
- * @description Actualiza el nombre de usuario y/o la descripción del usuario autenticado.
+ * @description Actualiza el perfil del usuario (username, descripción y/o foto de perfil).
  * @access  Private
- * @param {object} req.body - Cuerpo de la petición.
+ * @param {object} req.body - Cuerpo de la petición (multipart/form-data).
  * @param {string} [req.body.username] - El nuevo nombre de usuario.
  * @param {string} [req.body.description] - La nueva descripción.
+ * @param {Express.Multer.File} [req.file] - El nuevo archivo de imagen de perfil.
  * @returns {object} 200 - Éxito con los datos del usuario actualizados.
- * @returns {object} 400 - Error de validación.
- * @returns {object} 409 - Conflicto, el username ya existe.
+ * @returns {object} 4xx - Errores de validación, conflicto o tamaño de archivo.
  * @returns {object} 500 - Error del servidor.
  */
-app.patch('/api/profile', isAuthenticated, async (req, res) => {
-    try {
+app.patch('/api/profile',
+    isAuthenticated,
+    // Middleware de Multer para manejar la subida del archivo. Se coloca antes del controlador.
+    (req, res, next) => {
+        upload.single('profilePicture')(req, res, (err) => {
+            if (err instanceof multer.MulterError) {
+                if (err.code === 'LIMIT_FILE_SIZE') {
+                    return res.status(413).json({ message: 'El archivo es demasiado grande. El límite es de 4MB.' });
+                }
+                return res.status(400).json({ message: `Error al subir el archivo: ${err.message}` });
+            } else if (err) {
+                return res.status(500).json({ message: `Error desconocido al procesar el archivo: ${err.message}` });
+            }
+            next();
+        });
+    },
+    // Controlador principal de la ruta.
+    async (req, res) => {
         const { username, description } = req.body;
         const userId = req.session.userId;
+        const tempFile = req.file;
 
-        if (!username && description === undefined) {
-            return res.status(400).json({ message: 'No se proporcionaron datos para actualizar.' });
-        }
-        
-        // --- Validación de los datos de entrada ---
-        const errors = {};
-        if (username && (username.length < 3 || username.length > 20)) {
-            errors.username = 'El nombre de usuario debe tener entre 3 y 20 caracteres.';
-        }
-        if (description && description.length > 300) {
-            errors.description = 'La descripción no puede exceder los 300 caracteres.';
-        }
-
-        if (Object.keys(errors).length > 0) {
-            return res.status(400).json({ errors });
-        }
-
-        // Verifica si el nuevo nombre de usuario ya está en uso por otro usuario.
-        if (username) {
-            const existingUser = await User.findOne({ username: username, _id: { $ne: userId } });
-            if (existingUser) {
-                return res.status(409).json({ errors: { username: 'Este nombre de usuario ya está en uso.' } });
+        // Función auxiliar para limpiar el archivo temporal de multer en caso de error.
+        const cleanupTempFile = () => {
+            if (tempFile && fs.existsSync(tempFile.path)) {
+                fs.unlinkSync(tempFile.path);
             }
-        }
+        };
 
-        const updateData = {};
-        if (username) updateData.username = username;
-        if (description !== undefined) updateData.description = description;
-
-        const updatedUser = await User.findByIdAndUpdate(
-            userId,
-            { $set: updateData },
-            { new: true, runValidators: true } // `new: true` devuelve el documento actualizado.
-        ).select('firstName lastName username email description profilePicturePath role createdAt');
-
-        if (!updatedUser) {
-            return res.status(404).json({ message: 'Usuario no encontrado.' });
-        }
-
-        res.status(200).json({
-            message: 'Perfil actualizado con éxito.',
-            user: updatedUser
-        });
-
-    } catch (error) {
-        console.error('Error en PATCH /api/profile:', error);
-        if (error.name === 'ValidationError') {
-            const validationErrors = {};
-            for (let field in error.errors) {
-                validationErrors[field] = error.errors[field].message;
+        try {
+            // Validación: al menos un campo debe ser proporcionado.
+            if (!username && description === undefined && !tempFile) {
+                return res.status(400).json({ message: 'No se proporcionaron datos para actualizar.' });
             }
-            return res.status(400).json({ errors: validationErrors });
+
+            const errors = {};
+            if (username && (username.length < 3 || username.length > 20)) {
+                errors.username = 'El nombre de usuario debe tener entre 3 y 20 caracteres.';
+            }
+            if (description && description.length > 300) {
+                errors.description = 'La descripción no puede exceder los 300 caracteres.';
+            }
+            if (Object.keys(errors).length > 0) {
+                cleanupTempFile();
+                return res.status(400).json({ errors });
+            }
+
+            const userToUpdate = await User.findById(userId);
+            if (!userToUpdate) {
+                cleanupTempFile();
+                return res.status(404).json({ message: 'Usuario no encontrado.' });
+            }
+
+            if (username) {
+                const existingUser = await User.findOne({ username: username, _id: { $ne: userId } });
+                if (existingUser) {
+                    cleanupTempFile();
+                    return res.status(409).json({ errors: { username: 'Este nombre de usuario ya está en uso.' } });
+                }
+            }
+
+            const updateData = {};
+            if (username) updateData.username = username;
+            if (description !== undefined) updateData.description = description;
+
+            // Si se subió un nuevo archivo, procesarlo.
+            if (tempFile) {
+                // 1. Eliminar la foto de perfil anterior para no dejar archivos huérfanos.
+                const oldPicturePath = userToUpdate.profilePicturePath;
+                if (oldPicturePath && oldPicturePath !== DEFAULT_AVATAR_PATH && oldPicturePath.startsWith('uploads/')) {
+                    const fullOldPath = path.join(__dirname, oldPicturePath);
+                    if (fs.existsSync(fullOldPath)) {
+                        fs.unlinkSync(fullOldPath);
+                    }
+                }
+
+                // 2. Procesar y guardar la nueva imagen.
+                const newFileName = `${userId}.webp`;
+                const newPath = path.join(__dirname, 'uploads', newFileName);
+                await sharp(tempFile.path)
+                    .resize(500, 500, { fit: 'cover' })
+                    .webp({ quality: 80 })
+                    .toFile(newPath);
+
+                cleanupTempFile(); // Elimina el archivo temporal original subido por multer.
+
+                // 3. Añadir la nueva ruta a los datos a actualizar.
+                updateData.profilePicturePath = `uploads/${newFileName}`;
+            }
+
+            const updatedUser = await User.findByIdAndUpdate(
+                userId,
+                { $set: updateData },
+                { new: true, runValidators: true }
+            ).select('firstName lastName username email description profilePicturePath role createdAt');
+
+            res.status(200).json({
+                message: 'Perfil actualizado con éxito.',
+                user: updatedUser
+            });
+
+        } catch (error) {
+            cleanupTempFile();
+            console.error('Error en PATCH /api/profile:', error);
+            if (error.name === 'ValidationError') {
+                const validationErrors = {};
+                for (let field in error.errors) {
+                    validationErrors[field] = error.errors[field].message;
+                }
+                return res.status(400).json({ errors: validationErrors });
+            }
+            res.status(500).json({ message: 'Error en el servidor al actualizar el perfil.' });
         }
-        res.status(500).json({ message: 'Error en el servidor al actualizar el perfil.' });
     }
-});
+);
 
 /**
  * @route   GET /api/messages
