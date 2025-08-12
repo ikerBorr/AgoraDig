@@ -275,7 +275,13 @@ async function renderPage(path) {
 
                 // Si es la primera página y no hay mensajes, muestra un mensaje de bienvenida.
                 if (currentPage === 1 && data.messages.length === 0) {
-                    messagesContainer.innerHTML = `<div class="empty-feed-message"><br><p>Aún no hay mensajes publicados. ¡Sé el primero en compartir tus ideas!</p><br></div>`;
+                    messagesContainer.innerHTML = `
+                        <div class="empty-feed-message">
+                            <br>
+                            <p>Aún no hay mensajes publicados. ¡Sé el primero en compartir tus ideas!</p>
+                            <br>
+                        </div>
+                    `;
                     feedLoader.classList.add('hidden');
                     return;
                 }
@@ -296,7 +302,11 @@ async function renderPage(path) {
                 }
             } catch (error) {
                 console.error(error);
-                messagesContainer.innerHTML = '<p class="error-text">No se pudieron cargar los mensajes. Inténtalo de nuevo más tarde.</p>';
+                messagesContainer.innerHTML = `
+                    <p class="error-text">
+                        No se pudieron cargar los mensajes. Inténtalo de nuevo más tarde.
+                    </p>
+                `;
             } finally {
                 feedLoader.classList.add('hidden');
             }
@@ -446,9 +456,48 @@ async function renderPage(path) {
             }
 
             if (viewerRole === 'admin') {
-                adminControlsHtml = `<div class="admin-form-wrapper"><h3>Panel de Administrador</h3><form id="admin-edit-form"><div class="form-group-inline"><label for="role-select">Rol:</label><select id="role-select" name="role"><option value="user" ${userData.role === 'user' ? 'selected' : ''}>Usuario</option><option value="moderator" ${userData.role === 'moderator' ? 'selected' : ''}>Moderador</option><option value="admin" ${userData.role === 'admin' ? 'selected' : ''}>Admin</option></select></div><div class="form-group-inline"><label for="status-select">Estado:</label><select id="status-select" name="userStatus"><option value="active" ${userData.userStatus === 'active' || !userData.userStatus ? 'selected' : ''}>Activo</option><option value="banned" ${userData.userStatus === 'banned' ? 'selected' : ''}>Baneado</option></select></div><div class="form-group-inline"><label for="strikes-input">Strikes:</label><input type="number" id="strikes-input" name="strikes" value="${userData.strikes !== undefined ? userData.strikes : 0}" min="0"></div><p id="admin-form-message" class="message-info hidden"></p><button type="submit" class="button-primary">Guardar Cambios Admin</button></form></div>`;
+                adminControlsHtml = `
+                    <div class="admin-form-wrapper">
+                        <h3>Panel de Administrador</h3>
+                        <form id="admin-edit-form">
+                            <div class="form-group-inline">
+                                <label for="role-select">Rol:</label>
+                                <select id="role-select" name="role">
+                                    <option value="user" ${userData.role === 'user' ? 'selected' : ''}>Usuario</option>
+                                    <option value="moderator" ${userData.role === 'moderator' ? 'selected' : ''}>Moderador</option>
+                                    <option value="admin" ${userData.role === 'admin' ? 'selected' : ''}>Admin</option>
+                                </select>
+                            </div>
+                            <div class="form-group-inline">
+                                <label for="status-select">Estado:</label>
+                                <select id="status-select" name="userStatus">
+                                    <option value="active" ${userData.userStatus === 'active' || !userData.userStatus ? 'selected' : ''}>Activo</option>
+                                    <option value="banned" ${userData.userStatus === 'banned' ? 'selected' : ''}>Baneado</option>
+                                </select>
+                            </div>
+                            <div class="form-group-inline">
+                                <label for="strikes-input">Strikes:</label>
+                                <input type="number" id="strikes-input" name="strikes" value="${userData.strikes !== undefined ? userData.strikes : 0}" min="0">
+                            </div>
+                            <p id="admin-form-message" class="message-info hidden"></p>
+                            <button type="submit" class="button-primary">Guardar Cambios Admin</button>
+                        </form>
+                    </div>
+                `;
             } else if (viewerRole === 'moderator') {
-                 adminControlsHtml = `<div class="admin-form-wrapper"><h3>Panel de Moderador</h3><form id="admin-edit-form"><div class="form-group-inline"><label for="strikes-input">Strikes:</label><input type="number" id="strikes-input" name="strikes" value="${userData.strikes !== undefined ? userData.strikes : 0}" min="0"></div><p id="admin-form-message" class="message-info hidden"></p><button type="submit" class="button-primary">Actualizar Strikes</button></form></div>`;
+                 adminControlsHtml = `
+                    <div class="admin-form-wrapper">
+                        <h3>Panel de Moderador</h3>
+                        <form id="admin-edit-form">
+                            <div class="form-group-inline">
+                                <label for="strikes-input">Strikes:</label>
+                                <input type="number" id="strikes-input" name="strikes" value="${userData.strikes !== undefined ? userData.strikes : 0}" min="0">
+                            </div>
+                            <p id="admin-form-message" class="message-info hidden"></p>
+                            <button type="submit" class="button-primary">Actualizar Strikes</button>
+                        </form>
+                    </div>
+                 `;
             }
 
             // Inyección de los datos en la plantilla.
