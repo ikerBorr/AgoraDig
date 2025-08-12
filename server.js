@@ -205,7 +205,7 @@ const userSchema = new mongoose.Schema({
     profilePicturePath: { type: String },
     acceptsPublicity: { type: Boolean, default: false, index: true }, // Indexado para búsquedas eficientes.
     role: { type: String, enum: ['user', 'admin', 'moderator'], default: 'user', index: true },
-    userStatus: { type: String, enum: ['active', 'verified', 'banned'], default: 'active', index: true },
+    userStatus: { type: String, enum: ['active', 'verified', 'banned', 'deleted'], default: 'active', index: true },
     strikes: { type: Number, default: 0 },
     loginAttempts: { type: Number, default: 0, select: false }, // Contador de intentos de login fallidos.
     lockoutUntil: { type: Date, select: false } // Fecha hasta la que la cuenta está bloqueada.
@@ -257,7 +257,7 @@ const Message = mongoose.model('Message', messageSchema);
 // =================================================================
 
 const MAX_LOGIN_ATTEMPTS = 5;
-const LOCKOUT_TIME = 24 * 60 * 60 * 1000; // 24 horas en milisegundos
+const LOCKOUT_TIME = 24 * 60 * 60 * 1000; // 24 horas de bloqueo
 
 /**
  * @route   POST /login
@@ -284,6 +284,11 @@ app.post('/login', sensitiveRouteLimiter, async (req, res) => {
         // Si el usuario no existe, devuelve un error específico.
         if (!user) {
             return res.status(401).json({ errors: { loginIdentifier: 'El usuario o email no existe.' } });
+        }
+
+        // Comprueba si la cuenta ha sido eliminada.
+        if (user.userStatus === 'deleted') {
+            return res.status(403).json({ message: 'Esta cuenta ha sido eliminada y ya no se puede acceder a ella.' });
         }
 
         // Comprueba si la cuenta está bloqueada antes de verificar la contraseña.
@@ -683,6 +688,80 @@ app.patch('/api/profile',
 );
 
 /**
+ * @route   DELETE /api/profile
+ * @description Realiza un "soft delete" del usuario: cambia su estado a 'deleted',
+ * anonimiza sus datos personales, elimina sus likes y su foto de perfil.
+ * @access  Private
+ * @returns {object} 200 - Mensaje de éxito.
+ * @returns {object} 404 - Usuario no encontrado.
+ * @returns {object} 500 - Error del servidor.
+ */
+app.delete('/api/profile', isAuthenticated, async (req, res) => {
+    const userId = req.session.userId;
+    const { recoveryPIN } = req.body; // Se espera el PIN en el cuerpo de la petición.
+
+    try {
+        // Validación: el PIN es obligatorio para esta operación.
+        if (!recoveryPIN) {
+            return res.status(400).json({ message: 'Se requiere el PIN de recuperación para eliminar la cuenta.' });
+        }
+
+        const user = await User.findById(userId).select('+recoveryPIN');
+        if (!user) {
+            return res.status(404).json({ message: 'Usuario no encontrado.' });
+        }
+
+        // Comprueba si el PIN de recuperación es correcto.
+        const isPinMatch = await bcrypt.compare(recoveryPIN, user.recoveryPIN);
+        if (!isPinMatch) {
+            return res.status(403).json({ message: 'El PIN de recuperación proporcionado es incorrecto.' });
+        }
+
+        // Si el PIN es correcto, procede con el "soft delete".
+
+        // 1. Eliminar todos los 'likes' dados por este usuario.
+        await Message.updateMany({ likes: userId }, { $pull: { likes: userId } });
+
+        // 2. Eliminar la foto de perfil del sistema de archivos.
+        const picturePath = user.profilePicturePath;
+        if (picturePath && picturePath.startsWith('uploads/')) {
+            const fullPath = path.join(__dirname, picturePath);
+            if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+        }
+
+        // 3. Realizar el "soft delete": actualizar estado y anonimizar datos.
+        const anonymizedEmail = `${user.email}_deleted`;
+        const anonymizedUsername = `Usuario_Eliminado_${user._id}`;
+
+        await User.findByIdAndUpdate(userId, {
+            $set: {
+                userStatus: 'deleted',
+                username: anonymizedUsername,
+                email: anonymizedEmail,
+                description: '',
+                profilePicturePath: DEFAULT_AVATAR_PATH, // Asigna el avatar por defecto.
+                password: undefined, // Elimina la contraseña.
+                recoveryPIN: undefined // Elimina el PIN.
+            }
+        });
+
+        // 4. Destruir la sesión del usuario.
+        req.session.destroy(err => {
+            if (err) {
+                console.error('Error al destruir la sesión tras el soft-delete:', err);
+                return res.status(500).json({ message: 'Cuenta eliminada, pero hubo un error al cerrar la sesión.' });
+            }
+            res.clearCookie('connect.sid');
+            res.status(200).json({ message: 'Tu cuenta ha sido eliminada correctamente.' });
+        });
+
+    } catch (error) {
+        console.error(`Error en el soft-delete para el usuario ${userId}:`, error);
+        res.status(500).json({ message: 'Ocurrió un error en el servidor al intentar eliminar tu cuenta.' });
+    }
+});
+
+/**
  * @route   GET /api/messages
  * @description Obtiene una lista paginada de mensajes activos.
  * @access  Public
@@ -906,27 +985,29 @@ app.get('/api/users/username/:username', async (req, res) => {
         let fieldsToSelect = 'firstName lastName username description profilePicturePath createdAt role userStatus';
         let requesterIsModeratorOrAdmin = false;
 
-        // Si se solicita información de moderación y el usuario está logueado, verifica sus permisos.
         if (req.query.include_moderation === 'true' && req.session.userId) {
             const requester = await User.findById(req.session.userId).select('role');
             if (requester && (requester.role === 'admin' || requester.role === 'moderator')) {
                 requesterIsModeratorOrAdmin = true;
             }
         }
-
-        // Si tiene permisos, añade los campos de moderación a la consulta.
         if (requesterIsModeratorOrAdmin) {
             fieldsToSelect += ' strikes';
         }
         
         const user = await User.findOne({ username: username }).select(fieldsToSelect);
 
+        // Si el usuario no existe en la BD, devuelve 404.
         if (!user) {
             return res.status(404).json({ message: 'Usuario no encontrado.' });
         }
 
-        user.profilePicturePath = getValidProfilePicturePath(user.profilePicturePath);
+        // Si el usuario existe pero está eliminado, devuelve 410 Gone.
+        if (user.userStatus === 'deleted') {
+            return res.status(410).json({ message: 'Este usuario ha sido eliminado.' });
+        }
 
+        user.profilePicturePath = getValidProfilePicturePath(user.profilePicturePath);
         res.status(200).json(user);
 
     } catch (error) {

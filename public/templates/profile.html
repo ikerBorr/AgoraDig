@@ -26,6 +26,32 @@
         <p id="logout-message" class="message-info"></p>
     </div>
 
+    <div class="profile-actions-container">
+        <br>
+        <button id="delete-account-button" class="button-danger" title="Eliminar cuenta permanentemente">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+            <span>Eliminar Cuenta</span>
+        </button>
+        <p id="delete-message" class="message-info"></p>
+    </div>
+
+    <div id="delete-confirm-modal" class="profile-modal-overlay hidden">
+        <div class="profile-modal-content">
+            <h2>Confirmar Eliminación</h2>
+            <p>¿Estás seguro de que quieres eliminar tu cuenta permanentemente? Esta acción no se puede deshacer.</p>
+            
+            <div class="profile-modal-form-group">
+                <label for="recovery-pin-input">Para confirmar, introduce tu <strong>PIN de recuperación</strong>:</label>
+                <input type="text" id="recovery-pin-input" name="recoveryPIN" required placeholder="Tu PIN de 16 caracteres">
+            </div>
+            <div id="modal-delete-error" class="profile-modal-error-text hidden"></div>
+            <div class="modal-button-group">
+                <button id="cancel-delete-btn" class="button">Cancelar</button>
+                <button id="confirm-delete-btn" class="button-danger">Sí, eliminar mi cuenta</button>
+            </div>
+        </div>
+    </div>
+
     <div id="edit-profile-modal" class="profile-modal-overlay hidden">
         <div class="profile-modal-content">
             <button id="close-edit-modal-btn" class="profile-modal-close-button" title="Cerrar">&times;</button>

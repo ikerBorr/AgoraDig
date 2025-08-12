@@ -429,8 +429,21 @@ async function renderPage(path) {
             const userResponse = await fetch(apiUrl);
             if (!userResponse.ok) {
                 const errorData = await userResponse.json();
+                // Si el usuario fue ELIMINADO (410 Gone), muestra un mensaje específico.
+                if (userResponse.status === 410) {
+                    // Carga la plantilla de error 410
+                    appRoot.innerHTML = await fetchTemplate('../templates/error-410.html');
+                    document.title = 'ERROR 410';
+                    templatePath = ''; // Evita que se siga procesando.
+                    // Oculta el loader y muestra el contenido antes de salir.
+                    loaderContainer.classList.add('hidden');
+                    appRoot.classList.remove('hidden');
+                    return; // Termina la ejecución para esta ruta.
+                }
+                // Para cualquier otro error (ej. 404), lanza la excepción para el catch general.
                 throw new Error(errorData.message || 'No se pudieron cargar los datos del perfil.');
             }
+            
 
             const userData = await userResponse.json();
             let profileHtml = await fetchTemplate('./templates/view-profile.html');

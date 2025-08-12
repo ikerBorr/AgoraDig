@@ -63,6 +63,8 @@
 .author-username {
     font-weight: 600;
     color: var(--color-texto);
+    overflow-wrap: break-word; /* Permite que el navegador divida palabras largas para evitar desbordamiento */
+    word-break: break-word;    /* Proporciona una capa extra de seguridad para el ajuste de texto */
 }
 
 .likes-info {
