@@ -2,14 +2,16 @@
  * @file app.js
  * @description Orquestador principal de la Single Page Application (SPA).
  * Gestiona el enrutamiento del lado del cliente, la carga de plantillas HTML
- * y la ejecución de los scripts asociados a cada vista.
+ * desde el directorio `/templates`, y la ejecución de los scripts de lógica asociados a cada vista.
  */
 
 // ===================================
 //  ELEMENTOS PRINCIPALES DEL DOM
 // ===================================
 
+/** @type {HTMLElement} Raíz de la aplicación donde se renderizan las vistas. */
 const appRoot = document.getElementById('app-root');
+/** @type {HTMLElement} Contenedor del indicador de carga, mostrado durante la navegación. */
 const loaderContainer = document.getElementById('loader-container');
 
 
@@ -18,10 +20,11 @@ const loaderContainer = document.getElementById('loader-container');
 // ===================================
 
 /**
- * Crea y devuelve un elemento DOM representando una tarjeta de mensaje.
- * Esta función desacopla la lógica de creación de la tarjeta del renderizado principal.
- * @param {object} message - El objeto del mensaje que contiene los datos a mostrar.
- * @returns {HTMLDivElement} El elemento del DOM `div` con la clase 'message-card'.
+ * @function createMessageCard
+ * @description Crea y devuelve un elemento del DOM que representa una tarjeta de mensaje.
+ * Esta función desacopla la lógica de creación de la tarjeta del renderizado principal del feed.
+ * @param {object} message - El objeto del mensaje que contiene los datos a mostrar (título, contenido, autor, etc.).
+ * @returns {HTMLDivElement} El elemento del DOM `div` con la clase 'message-card', listo para ser insertado en el DOM.
  */
 function createMessageCard(message) {
     const card = document.createElement('div');
@@ -102,8 +105,9 @@ function createMessageCard(message) {
 
 
 /**
- * Desplaza suavemente la vista hasta un elemento del DOM especificado por un selector.
- * Útil para navegar a anclas (#) dentro de una misma vista de la SPA.
+ * @function scrollToElement
+ * @description Desplaza suavemente la vista hasta un elemento del DOM especificado por un selector CSS.
+ * Útil para navegar a anclas de sección (ej. `#contacto`) dentro de una misma vista de la SPA.
  * @param {string} selector - Un selector CSS válido para el elemento de destino.
  */
 function scrollToElement(selector) {
@@ -119,11 +123,12 @@ function scrollToElement(selector) {
 // ===================================
 
 /**
- * Carga y ejecuta dinámicamente un script asociado a una plantilla de vista.
+ * @function loadAndExecuteScript
+ * @description Carga y ejecuta dinámicamente un script asociado a una plantilla de vista.
  * Elimina el script de la vista anterior antes de añadir el nuevo para evitar conflictos de listeners
  * o ejecución de código no deseado en la nueva vista.
- * @param {string} templatePath - La ruta de la plantilla HTML que se ha cargado.
- * @returns {Promise<void>}
+ * @param {string} templatePath - La ruta de la plantilla HTML que se ha cargado (ej. './templates/profile.html').
+ * @returns {Promise<void>} Una promesa que se resuelve cuando el script ha sido cargado y su función de inicialización ejecutada.
  */
 async function loadAndExecuteScript(templatePath) {
     const oldScript = document.getElementById('view-script');
@@ -159,11 +164,12 @@ async function loadAndExecuteScript(templatePath) {
 }
 
 /**
- * Realiza una petición para obtener el contenido de un archivo de plantilla HTML.
- * Si la plantilla no se encuentra (error 404), carga una plantilla de error por defecto
- * para informar al usuario de manera controlada.
- * @param {string} path - La ruta al archivo de plantilla (.html).
- * @returns {Promise<string>} El contenido de la plantilla como una cadena de texto.
+ * @function fetchTemplate
+ * @description Realiza una petición `fetch` para obtener el contenido de un archivo de plantilla HTML.
+ * Si la plantilla no se encuentra (error 404), carga una plantilla de error `error-404.html` por defecto
+ * para informar al usuario de manera controlada sin romper la aplicación.
+ * @param {string} path - La ruta al archivo de plantilla (ej. './templates/home.html').
+ * @returns {Promise<string>} Una promesa que se resuelve con el contenido de la plantilla como una cadena de texto.
  */
 async function fetchTemplate(path) {
     try {
@@ -181,7 +187,8 @@ async function fetchTemplate(path) {
 }
 
 /**
- * Inicia un intervalo de sondeo (polling) para actualizar los contadores de 'likes' de los mensajes visibles.
+ * @function startLikePolling
+ * @description Inicia un intervalo de sondeo (polling) para actualizar los contadores de 'likes' de los mensajes visibles en el feed.
  * Limpia cualquier intervalo anterior para evitar múltiples ejecuciones simultáneas, lo cual es crítico en una SPA
  * donde el usuario puede navegar entre vistas sin recargar la página.
  * @param {HTMLElement} messagesContainer - El contenedor del DOM donde se encuentran las tarjetas de mensajes.
@@ -224,12 +231,12 @@ function startLikePolling(messagesContainer) {
 // ===================================
 
 /**
- * Renderiza el contenido de una página basándose en la ruta URL proporcionada.
- * Es la función central del enrutador de la SPA. Gestiona la obtención de plantillas,
- * la lógica de negocio específica de cada vista y la inicialización de scripts.
- * Su complejidad sugiere que podría refactorizarse en funciones más pequeñas.
- * @param {string} path - La ruta de la URL a renderizar (ej. '/home', '/profile', '/login').
- * @returns {Promise<void>}
+ * @function renderPage
+ * @description Renderiza el contenido de una página basándose en la ruta URL proporcionada. Es el corazón del enrutador de la SPA.
+ * Gestiona la obtención de plantillas, la lógica de negocio específica de cada vista (como obtener datos de la API)
+ * y la inicialización de los scripts correspondientes.
+ * @param {string} path - La ruta de la URL a renderizar (ej. '/home', '/profile', '/login?redirect=true').
+ * @returns {Promise<void>} Una promesa que se resuelve cuando la página ha sido completamente renderizada en el `appRoot`.
  */
 async function renderPage(path) {
     // Extrae la ruta base sin anclas (#).
@@ -660,9 +667,10 @@ async function renderPage(path) {
 }
 
 /**
- * Maneja los clics en los enlaces de navegación de la aplicación.
- * Intercepta la navegación por defecto para implementar la lógica de la SPA
- * utilizando la History API, evitando recargas completas de la página.
+ * @function handleNavClick
+ * @description Maneja los clics en los enlaces de navegación de la aplicación (`<a>`).
+ * Intercepta el comportamiento de navegación por defecto para implementar la lógica de la SPA
+ * utilizando la History API (`window.history.pushState`), evitando así recargas completas de la página.
  * @param {MouseEvent} event - El objeto del evento de clic.
  */
 async function handleNavClick(event) {
@@ -697,9 +705,9 @@ async function handleNavClick(event) {
 //  INICIALIZACIÓN DE LA APLICACIÓN
 // ===================================
 
-/** @description Maneja los clics en los enlaces para la navegación SPA. */
+/** @description Manejador de eventos global para los clics en enlaces, permitiendo la navegación SPA. */
 document.addEventListener('click', handleNavClick);
-/** @description Maneja los eventos de navegación del historial del navegador (botones atrás/adelante). */
+/** @description Maneja los eventos de navegación del historial del navegador (botones de atrás/adelante). */
 window.addEventListener('popstate', () => { renderPage(window.location.pathname + window.location.search); });
-/** @description Renderiza la página inicial cuando el DOM está completamente cargado. */
+/** @description Renderiza la página inicial correspondiente a la URL actual cuando el DOM está completamente cargado. */
 document.addEventListener('DOMContentLoaded', () => { renderPage(window.location.pathname + window.location.search); });

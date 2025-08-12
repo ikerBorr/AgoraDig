@@ -1,7 +1,7 @@
 /**
  * @file server.js
  * @description Servidor principal de la aplicación AgoraDig. Gestiona las conexiones,
- * autenticación de usuarios, registro, y perfiles. Utiliza Express.js
+ * autenticación de usuarios, registro, perfiles, y el API del foro. Utiliza Express.js
  * para el enrutamiento y Mongoose para la interacción con la base de datos MongoDB.
  * @author CPV05
  */
@@ -37,7 +37,8 @@ const helmet = require('helmet');
 const DEFAULT_AVATAR_PATH = 'images/default-avatar.webp';
 
 /**
- * Verifica si la ruta de una imagen de perfil existe en el sistema de archivos.
+ * @function getValidProfilePicturePath
+ * @description Verifica si la ruta de una imagen de perfil existe en el sistema de archivos.
  * Si no existe, devuelve la ruta de la imagen por defecto para evitar enlaces rotos en el cliente.
  * @param {string} picturePath - La ruta de la imagen guardada en la base de datos del usuario.
  * @returns {string} Una ruta de imagen válida y segura para ser servida al cliente.
@@ -87,7 +88,7 @@ app.set('trust proxy', 1);
 //  MIDDLEWARE
 // =================================================================
 
-// Aplica cabeceras de seguridad HTTP básicas.
+// Aplica cabeceras de seguridad HTTP básicas (CSP, XSS Protection, etc.).
 app.use(helmet());
 // Parsea cuerpos de petición con formato JSON.
 app.use(express.json());
@@ -114,7 +115,8 @@ app.use(session({
 app.use(express.static(path.join(__dirname, 'public')));
 
 /**
- * Middleware de autorización para verificar si un usuario autenticado tiene el rol de 'moderator' o 'admin'.
+ * @function isModeratorOrAdmin
+ * @description Middleware de autorización para verificar si un usuario autenticado tiene el rol de 'moderator' o 'admin'.
  * Rechaza la petición si el usuario no tiene los privilegios adecuados.
  * @param {import('express').Request} req - Objeto de la petición de Express.
  * @param {import('express').Response} res - Objeto de la respuesta de Express.
@@ -136,6 +138,7 @@ const isModeratorOrAdmin = async (req, res, next) => {
 };
 
 /**
+ * @constant DoSLimiter
  * @description Limitador de peticiones global para mitigar ataques de denegación de servicio (DoS).
  * Limita a 200 peticiones por IP cada 15 minutos.
  */
@@ -148,6 +151,7 @@ const DoSLimiter = rateLimit({
 });
 
 /**
+ * @constant sensitiveRouteLimiter
  * @description Limitador de peticiones más estricto para rutas sensibles (login, registro).
  * Limita a 10 peticiones por IP cada 5 minutos para prevenir ataques de fuerza bruta.
  */
@@ -163,7 +167,8 @@ const sensitiveRouteLimiter = rateLimit({
 app.use(DoSLimiter);
 
 /**
- * Middleware de autenticación para verificar si un usuario tiene una sesión activa.
+ * @function isAuthenticated
+ * @description Middleware de autenticación para verificar si un usuario tiene una sesión activa.
  * Comprueba la existencia de `req.session.userId`. Si no existe, rechaza la
  * petición con un estado 401 (No Autorizado).
  * @param {import('express').Request} req - Objeto de la petición de Express.
@@ -192,6 +197,11 @@ mongoose.connect(mongoUrl)
 /**
  * @description Esquema de Mongoose para el modelo de Usuario.
  * Define la estructura, tipos de datos y validaciones para los documentos de usuario.
+ * @property {string} password - No se devuelve en las consultas por defecto (`select: false`).
+ * @property {string} recoveryPIN - PIN de recuperación hasheado, no se devuelve por defecto.
+ * @property {number} loginAttempts - Contador de intentos de login fallidos, no se devuelve por defecto.
+ * @property {Date} lockoutUntil - Fecha hasta la que la cuenta está bloqueada, no se devuelve por defecto.
+ * @property {object} timestamps - Añade automáticamente los campos `createdAt` y `updatedAt`.
  */
 const userSchema = new mongoose.Schema({
     firstName: { type: String, required: true, trim: true },
@@ -199,25 +209,26 @@ const userSchema = new mongoose.Schema({
     dateOfBirth: { type: Date, required: true },
     username: { type: String, required: true, unique: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    password: { type: String, required: true, select: false }, // No se devuelve en las consultas por defecto.
-    recoveryPIN: { type: String, required: true, select: false, unique: true }, // PIN de recuperación, no se devuelve.
+    password: { type: String, required: true, select: false },
+    recoveryPIN: { type: String, required: true, select: false, unique: true },
     description: { type: String, trim: true, maxlength: 300, default: '' },
     profilePicturePath: { type: String },
-    acceptsPublicity: { type: Boolean, default: false, index: true }, // Indexado para búsquedas eficientes.
+    acceptsPublicity: { type: Boolean, default: false, index: true },
     role: { type: String, enum: ['user', 'admin', 'moderator'], default: 'user', index: true },
     userStatus: { type: String, enum: ['active', 'verified', 'banned', 'deleted'], default: 'active', index: true },
     strikes: { type: Number, default: 0 },
-    loginAttempts: { type: Number, default: 0, select: false }, // Contador de intentos de login fallidos.
-    lockoutUntil: { type: Date, select: false } // Fecha hasta la que la cuenta está bloqueada.
+    loginAttempts: { type: Number, default: 0, select: false },
+    lockoutUntil: { type: Date, select: false }
 }, {
-    timestamps: true, // Añade automáticamente los campos createdAt y updatedAt.
+    timestamps: true,
 });
 
 const User = mongoose.model('User', userSchema);
 
 /**
+ * @constant upload
  * @description Configuración de Multer para la gestión de subida de archivos.
- * Almacena temporalmente los archivos en 'uploads/' y limita su tamaño a 4MB.
+ * Almacena temporalmente los archivos en la carpeta 'uploads/' y limita su tamaño a 4MB.
  */
 const upload = multer({
   dest: 'uploads/',
@@ -229,6 +240,9 @@ const upload = multer({
 /**
  * @description Esquema de Mongoose para el modelo de Mensaje.
  * Define la estructura y validaciones para los mensajes del foro.
+ * @property {object} timestamps - Añade automáticamente `createdAt` y `updatedAt`.
+ * @property {object} toJSON - Configura la serialización a JSON para incluir campos virtuales.
+ * @property {object} toObject - Configura la conversión a objeto para incluir campos virtuales.
  */
 const messageSchema = new mongoose.Schema({
     sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
@@ -247,7 +261,12 @@ const messageSchema = new mongoose.Schema({
 // Índice compuesto para optimizar las consultas de mensajes activos ordenados por fecha.
 messageSchema.index({ messageStatus: 1, createdAt: -1 });
 
-// Campo virtual para calcular el número de 'likes' sin almacenarlo directamente.
+/**
+ * @virtual likeCount
+ * @description Campo virtual que calcula el número de 'likes' de un mensaje dinámicamente.
+ * No se almacena en la base de datos, se calcula al consultar el documento.
+ * @returns {number} El número total de 'likes'.
+ */
 messageSchema.virtual('likeCount').get(function() { return this.likes.length; });
 const Message = mongoose.model('Message', messageSchema);
 
@@ -257,12 +276,19 @@ const Message = mongoose.model('Message', messageSchema);
 // =================================================================
 
 const MAX_LOGIN_ATTEMPTS = 5;
-const LOCKOUT_TIME = 24 * 60 * 60 * 1000; // 24 horas de bloqueo
+const LOCKOUT_TIME = 24 * 60 * 60 * 1000; // 24 horas de bloqueo en milisegundos.
 
 /**
  * @route   POST /login
- * @description Autentica a un usuario y crea una sesión, con lógica de bloqueo de cuenta.
+ * @description Autentica a un usuario y crea una sesión. Implementa una política de bloqueo de cuenta
+ * tras múltiples intentos fallidos para prevenir ataques de fuerza bruta.
  * @access  Public
+ * @param   {object} req.body - Cuerpo de la petición con `loginIdentifier` (username o email) y `password`.
+ * @returns {object} 200 - Mensaje de éxito.
+ * @returns {object} 400 - Error de validación, faltan campos.
+ * @returns {object} 401 - Credenciales incorrectas.
+ * @returns {object} 403 - Cuenta bloqueada o eliminada.
+ * @returns {object} 500 - Error del servidor.
  */
 app.post('/login', sensitiveRouteLimiter, async (req, res) => {
     try {
@@ -507,7 +533,7 @@ app.post('/register',
 
 /**
  * @route   POST /logout
- * @description Cierra la sesión del usuario actual destruyendo la sesión en el servidor.
+ * @description Cierra la sesión del usuario actual destruyendo la sesión en el servidor y limpiando la cookie del cliente.
  * @access  Private (implícito por requerir una sesión para destruir)
  * @returns {object} 200 - Mensaje de éxito.
  * @returns {object} 500 - Error al destruir la sesión.
@@ -530,11 +556,11 @@ app.post('/logout', (req, res) => {
 
 /**
  * @route   GET /api/profile
- * @description Obtiene los datos del perfil del usuario autenticado.
- * @access  Private
+ * @description Obtiene los datos del perfil del usuario actualmente autenticado.
+ * @access  Private (requiere `isAuthenticated` middleware)
  * @returns {object} 200 - Objeto con los datos del perfil del usuario.
  * @returns {object} 401 - No autenticado.
- * @returns {object} 404 - Usuario no encontrado.
+ * @returns {object} 404 - Usuario no encontrado en la BD (sesión podría ser inválida).
  * @returns {object} 500 - Error del servidor.
  */
 app.get('/api/profile', isAuthenticated, async (req, res) => {
@@ -561,12 +587,12 @@ app.get('/api/profile', isAuthenticated, async (req, res) => {
 
 /**
  * @route   PATCH /api/profile
- * @description Actualiza el perfil del usuario (username, descripción y/o foto de perfil).
- * @access  Private
+ * @description Actualiza el perfil del usuario autenticado (username, descripción y/o foto de perfil).
+ * @access  Private (requiere `isAuthenticated` middleware)
  * @param {object} req.body - Cuerpo de la petición (multipart/form-data).
  * @param {string} [req.body.username] - El nuevo nombre de usuario.
  * @param {string} [req.body.description] - La nueva descripción.
- * @param {Express.Multer.File} [req.file] - El nuevo archivo de imagen de perfil.
+ * @param {Express.Multer.File} [req.file] - El nuevo archivo de imagen de perfil (campo `profilePicture`).
  * @returns {object} 200 - Éxito con los datos del usuario actualizados.
  * @returns {object} 4xx - Errores de validación, conflicto o tamaño de archivo.
  * @returns {object} 500 - Error del servidor.
@@ -689,10 +715,15 @@ app.patch('/api/profile',
 
 /**
  * @route   DELETE /api/profile
- * @description Realiza un "soft delete" del usuario: cambia su estado a 'deleted',
- * anonimiza sus datos personales, elimina sus likes y su foto de perfil.
- * @access  Private
+ * @description Realiza un "soft delete" del usuario. Esto cambia su estado a 'deleted',
+ * anonimiza sus datos personales para cumplir con el derecho al olvido, elimina sus likes
+ * y su foto de perfil del sistema de archivos. Requiere el PIN de recuperación como medida de seguridad.
+ * @access  Private (requiere `isAuthenticated` middleware)
+ * @param {object} req.body - Cuerpo de la petición.
+ * @param {string} req.body.recoveryPIN - El PIN de recuperación del usuario para confirmar la acción.
  * @returns {object} 200 - Mensaje de éxito.
+ * @returns {object} 400 - PIN de recuperación no proporcionado.
+ * @returns {object} 403 - El PIN de recuperación es incorrecto.
  * @returns {object} 404 - Usuario no encontrado.
  * @returns {object} 500 - Error del servidor.
  */
@@ -717,8 +748,12 @@ app.delete('/api/profile', isAuthenticated, async (req, res) => {
             return res.status(403).json({ message: 'El PIN de recuperación proporcionado es incorrecto.' });
         }
 
-        // Si el PIN es correcto, procede con el "soft delete".
-
+        // Comprueba si ya existe una cuenta eliminada con el mismo email.
+        const existingDeletedUser = await User.findOne({ email: `${user.email}_deleted`, userStatus: 'deleted' });
+        if (existingDeletedUser) {
+            return res.status(409).json({ message: 'Fallo al eliminar cuenta. Has eliminado otra cuenta hace poco' });
+        }
+        
         // 1. Eliminar todos los 'likes' dados por este usuario.
         await Message.updateMany({ likes: userId }, { $pull: { likes: userId } });
 
@@ -736,6 +771,8 @@ app.delete('/api/profile', isAuthenticated, async (req, res) => {
         await User.findByIdAndUpdate(userId, {
             $set: {
                 userStatus: 'deleted',
+                firstName: 'Usuario',
+                lastName: 'Eliminado',
                 username: anonymizedUsername,
                 email: anonymizedEmail,
                 description: '',
@@ -763,12 +800,12 @@ app.delete('/api/profile', isAuthenticated, async (req, res) => {
 
 /**
  * @route   GET /api/messages
- * @description Obtiene una lista paginada de mensajes activos.
+ * @description Obtiene una lista paginada de mensajes activos del foro.
  * @access  Public
  * @param {object} req.query - Parámetros de la consulta.
  * @param {number} [req.query.page=1] - El número de página a obtener.
  * @param {number} [req.query.limit=10] - El número de mensajes por página.
- * @returns {object} 200 - Objeto con mensajes e información de paginación.
+ * @returns {object} 200 - Objeto con un array de `messages` e información de paginación (`totalPages`, `currentPage`).
  * @returns {object} 500 - Error del servidor.
  */
 app.get('/api/messages', async (req, res) => {
@@ -817,14 +854,14 @@ app.get('/api/messages', async (req, res) => {
 /**
  * @route   POST /api/messages
  * @description Crea un nuevo mensaje en el foro.
- * @access  Private
+ * @access  Private (requiere `isAuthenticated` middleware)
  * @param {object} req.body - Cuerpo de la petición.
- * @param {string} req.body.title - El título del mensaje.
- * @param {string} req.body.content - El contenido del mensaje.
- * @param {string} [req.body.hashtags] - Cadena con hashtags (ej: "#tag1 #tag2").
- * @returns {object} 201 - El mensaje recién creado.
- * @returns {object} 400 - Error de validación.
- * @returns {object} 403 - Usuario baneado.
+ * @param {string} req.body.title - El título del mensaje (max 100 caracteres).
+ * @param {string} req.body.content - El contenido del mensaje (max 1500 caracteres).
+ * @param {string} [req.body.hashtags] - Cadena con hashtags separados por espacios (ej: "#tag1 #tag2").
+ * @returns {object} 201 - El mensaje recién creado, populado con los datos del autor.
+ * @returns {object} 400 - Error de validación (campos vacíos o exceden longitud).
+ * @returns {object} 403 - El usuario tiene el estado 'banned' y no puede publicar.
  * @returns {object} 500 - Error del servidor.
  */
 app.post('/api/messages', isAuthenticated, async (req, res) => {
@@ -881,11 +918,12 @@ app.post('/api/messages', isAuthenticated, async (req, res) => {
 
 /**
  * @route   POST /api/messages/:id/like
- * @description Añade o quita un "like" de un usuario a un mensaje.
- * @access  Private
+ * @description Añade o quita un "like" de un usuario a un mensaje específico.
+ * La lógica es de tipo "toggle": si el usuario ya ha dado like, se lo quita; si no, se lo añade.
+ * @access  Private (requiere `isAuthenticated` middleware)
  * @param {object} req.params - Parámetros de la ruta.
- * @param {string} req.params.id - El ID del mensaje.
- * @returns {object} 200 - Objeto con el nuevo contador y estado del like.
+ * @param {string} req.params.id - El ID del mensaje al que se dará/quitará like.
+ * @returns {object} 200 - Objeto con el nuevo contador de likes (`likeCount`) y el estado actual del like para el usuario (`isLiked`).
  * @returns {object} 404 - Mensaje no encontrado.
  * @returns {object} 500 - Error del servidor.
  */
@@ -933,11 +971,12 @@ app.post('/api/messages/:id/like', isAuthenticated, async (req, res) => {
 
 /**
  * @route   GET /api/messages/counts
- * @description Obtiene los contadores de likes para una lista de mensajes. Usado para polling desde el frontend.
+ * @description Obtiene los contadores de likes para una lista de IDs de mensajes.
+ * Diseñado para ser usado por el frontend para actualizar los contadores mediante polling de manera eficiente.
  * @access  Public
  * @param {object} req.query - Parámetros de la consulta.
  * @param {string} req.query.ids - Una cadena de IDs de mensajes separados por coma.
- * @returns {object} 200 - Un objeto mapeando cada ID de mensaje a su contador de likes.
+ * @returns {object} 200 - Un objeto mapeando cada ID de mensaje a su `likeCount`.
  * @returns {object} 400 - Si no se proporcionan IDs.
  * @returns {object} 500 - Error del servidor.
  */
@@ -970,14 +1009,17 @@ app.get('/api/messages/counts', async (req, res) => {
 
 /**
  * @route   GET /api/users/username/:username
- * @description Obtiene los datos del perfil PÚBLICO de un usuario. Incluye datos de
- * moderación si el solicitante es admin/moderador y lo solicita explícitamente.
+ * @description Obtiene los datos del perfil PÚBLICO de un usuario por su nombre de usuario.
+ * Si el solicitante es un moderador o administrador, puede incluir datos de moderación adicionales.
  * @access  Public (con datos privados para roles autorizados)
  * @param {object} req.params - Parámetros de la ruta.
  * @param {string} req.params.username - El nombre de usuario a consultar.
  * @param {object} req.query - Parámetros de la consulta.
- * @param {boolean} [req.query.include_moderation] - Si es `true`, intenta incluir datos de moderación.
+ * @param {boolean} [req.query.include_moderation] - Si es `true`, intenta incluir datos de moderación (strikes).
  * @returns {object} 200 - Objeto con los datos del perfil del usuario.
+ * @returns {object} 404 - Usuario no encontrado.
+ * @returns {object} 410 - El usuario ha sido eliminado (Gone).
+ * @returns {object} 500 - Error del servidor.
  */
 app.get('/api/users/username/:username', async (req, res) => {
     try {
@@ -1019,14 +1061,18 @@ app.get('/api/users/username/:username', async (req, res) => {
 /**
  * @route   PATCH /api/users/:username/admin-update
  * @description Actualiza el rol, estado o strikes de un usuario. Requiere privilegios de moderador/admin.
- * @access  Private (Moderator/Admin)
+ * Incluye una lógica de jerarquía para prevenir que los moderadores modifiquen a otros moderadores/admins
+ * o que alguien se modifique a sí mismo.
+ * @access  Private (Moderator/Admin, requiere `isAuthenticated` y `isModeratorOrAdmin` middlewares)
  * @param {object} req.params - Parámetros de la ruta.
  * @param {string} req.params.username - El nombre de usuario a modificar.
- * @param {object} req.body - Cuerpo de la petición.
- * @param {string} [req.body.role] - El nuevo rol (solo admin).
- * @param {string} [req.body.userStatus] - El nuevo estado (solo admin).
- * @param {number} [req.body.strikes] - El nuevo número de strikes (moderador y admin).
+ * @param {object} req.body - Cuerpo de la petición con los campos a actualizar.
+ * @param {string} [req.body.role] - El nuevo rol ('user', 'moderator', 'admin'). Solo modificable por un admin.
+ * @param {string} [req.body.userStatus] - El nuevo estado ('active', 'verified', 'banned'). Solo modificable por un admin.
+ * @param {number} [req.body.strikes] - El nuevo número de strikes. Modificable por moderador y admin.
  * @returns {object} 200 - El objeto del usuario actualizado.
+ * @returns {object} 4xx - Errores de permisos, validación o usuario no encontrado.
+ * @returns {object} 500 - Error del servidor.
  */
 app.patch('/api/users/:username/admin-update', isAuthenticated, isModeratorOrAdmin, async (req, res) => {
     try {
@@ -1106,9 +1152,9 @@ app.patch('/api/users/:username/admin-update', isAuthenticated, isModeratorOrAdm
 // =================================================================
 
 /**
- * @description Ruta "catch-all" que redirige cualquier petición GET no reconocida
- * a la página principal del frontend. Esencial para el funcionamiento de SPAs,
- * ya que permite que el enrutador del lado del cliente maneje las rutas.
+ * @description Ruta "catch-all". Redirige cualquier petición GET no reconocida por las rutas anteriores
+ * a la página principal del frontend (`index.html`). Esto es esencial para el funcionamiento de Single Page Applications (SPAs),
+ * ya que permite que el enrutador del lado del cliente maneje las URL.
  */
 app.get('*', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
 
