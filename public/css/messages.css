@@ -2,7 +2,7 @@
  * @file messages.css
  * @description Hoja de estilos para los componentes del feed de Ágora Digital.
  * Define la apariencia de las tarjetas de mensajes, el contenedor del feed,
- * y el modal de creación de nuevas publicaciones.
+ * y los modales de la aplicación.
  */
 
 /* ==========================================================================
@@ -138,7 +138,7 @@
     background-color: var(--color-fondo-hover);
 }
 
-/* --- Estilos para el Modal de Confirmación de Eliminación --- */
+/* --- Estilos para Botones de Modales --- */
 .modal-actions {
     display: flex;
     justify-content: flex-end; /* Alinea los botones a la derecha del modal. */
@@ -188,13 +188,26 @@
     color: var(--color-texto-secundario);
 }
 
+/* --- Botón de "Me gusta" --- */
+.like-button {
+    cursor: pointer;
+    transition: fill 0.2s ease, stroke 0.2s ease;
+}
+
+.like-button.liked {
+    fill: var(--color-like);
+}
+
+.like-button:hover {
+    stroke: var(--color-like);
+}
 
 /* ==========================================================================
-   # Estilos del Modal de Creación
+   # Estilos Genéricos para Modales
    ========================================================================== */
 
 /* --- Contenedor Principal del Modal y Superposición (Overlay) --- */
-#create-message-modal {
+.modal-overlay {
     position: fixed; /* Fija el modal respecto al viewport para cubrir toda la pantalla. */
     top: 0; left: 0;
     width: 100%; height: 100%;
@@ -204,13 +217,13 @@
     align-items: center;     /* Centra el contenido verticalmente. */
     z-index: 1000;           /* Asegura que el modal se muestre por encima de todo lo demás. */
     opacity: 0;
-    visibility: hidden; /* Oculta el modal y lo saca del flujo de accesibilidad (lectores de pantalla). */
-    transition: opacity 0.3s ease, visibility 0.3s ease; /* Transiciones para aparecer y desaparecer suavemente. */
+    visibility: hidden; /* Oculta el modal y lo saca del flujo de accesibilidad. */
+    transition: opacity 0.3s ease, visibility 0.3s ease; /* Transiciones suaves. */
     padding: 1rem;
 }
 
 /* Cuando el modal es visible (no tiene la clase .hidden), se aplican estas propiedades. */
-#create-message-modal:not(.hidden) {
+.modal-overlay:not(.hidden) {
     opacity: 1;
     visibility: visible;
 }
@@ -220,16 +233,16 @@
     background-color: var(--color-fondo);
     padding: 2rem;
     border-radius: 8px;
-    width: 70vw; /* Ancho adaptable al tamaño de la ventana. */
-    max-width: 700px; /* Ancho máximo para mantener la legibilidad en pantallas grandes. */
-    position: relative; /* Contexto de posicionamiento para el botón de cierre. */
+    width: 70vw; /* Ancho adaptable. */
+    max-width: 700px; /* Ancho máximo para legibilidad. */
+    position: relative;
     box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-    transform: translateY(-50px); /* Posición inicial fuera de la vista para la animación. */
-    transition: transform 0.3s ease; /* Animación de "caída". */
+    transform: translateY(-50px);
+    transition: transform 0.3s ease;
 }
 
-/* Cuando el modal es visible, vuelve a su posición original con una transición. */
-#create-message-modal:not(.hidden) .modal-content {
+/* Cuando .modal-overlay es visible, el .modal-content hijo vuelve a su posición original. */
+.modal-overlay:not(.hidden) .modal-content {
     transform: translateY(0);
 }
 
@@ -255,19 +268,19 @@
 }
 
 /* --- Formulario Dentro del Modal --- */
-#create-message-form .form-group {
+.form-group {
     margin-bottom: 1.25rem;
 }
 
-#create-message-form label {
+label {
     display: block; /* La etiqueta ocupa su propia línea sobre el input. */
     font-weight: 600;
     margin-bottom: 0.5rem;
     color: var(--color-texto);
 }
 
-#create-message-form input[type="text"],
-#create-message-form textarea {
+input[type="text"],
+textarea {
     width: 100%;
     padding: 0.75rem;
     font-size: 1rem;
@@ -279,15 +292,14 @@
     border: 1px solid var(--color-borde);
 }
 
-/* Estilos de foco para mejorar la accesibilidad y la experiencia de usuario. */
-#create-message-form input[type="text"]:focus,
-#create-message-form textarea:focus {
+input[type="text"]:focus,
+textarea:focus {
     outline: none; /* Se elimina el contorno por defecto para usar una sombra personalizada. */
     border-color: var(--color-enlace);
     box-shadow: 0 0 0 3px var(--color-foco-primario);
 }
 
-#create-message-form textarea {
+textarea {
     resize: vertical; /* Permite al usuario redimensionar el textarea solo verticalmente, evitando roturas del layout. */
     min-height: 120px;
 }
@@ -305,16 +317,35 @@
     color: #e74c3c; /* Un color rojo universalmente reconocido para errores. */
 }
 
-/* --- Botón de "Me gusta" --- */
-.like-button {
-    cursor: pointer;
-    transition: fill 0.2s ease, stroke 0.2s ease;
+/* ==========================================================================
+   # Estilos del Modal de Confirmación de Borrado
+   ========================================================================== */
+
+/* --- Overlay del modal de confirmación de borrado --- */
+.delete-confirmation-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
-.like-button.liked {
-    fill: var(--color-like);
+/* --- Estado visible del overlay --- */
+.delete-confirmation-overlay.visible {
+    opacity: 1;
+    visibility: visible;
 }
 
-.like-button:hover {
-    stroke: var(--color-like);
+/* Anulamos la animación de 'transform' para este modal específico. */
+.delete-confirmation-overlay .modal-content {
+    transform: none;
+    transition: none;
 }

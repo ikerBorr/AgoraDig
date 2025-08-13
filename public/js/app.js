@@ -144,42 +144,25 @@ function scrollToElement(selector) {
 
 /**
  * @function showDeleteConfirmationModal
- * @description Muestra un modal de confirmación para eliminar un mensaje, replicando el estilo y comportamiento de otros modales de la aplicación.
+ * @description Muestra un modal de confirmación para eliminar un mensaje.
+ * La apariencia está definida en `messages.css`. Esta función solo gestiona la creación del DOM
+ * y la lógica de los eventos, alternando la clase `.visible` para mostrar/ocultar el modal.
  * @param {string} messageId - El ID del mensaje a eliminar.
  * @param {HTMLElement} cardElement - El elemento de la tarjeta del mensaje a eliminar del DOM.
  */
 function showDeleteConfirmationModal(messageId, cardElement) {
+    // Previene la creación de múltiples modales.
     if (document.querySelector('.delete-confirmation-overlay')) return;
 
+    // Crea el overlay del modal y le asigna su clase CSS principal.
     const modalOverlay = document.createElement('div');
     modalOverlay.className = 'delete-confirmation-overlay';
 
-    // Aplicar estilos en JS para replicar el comportamiento de #create-message-modal
-    Object.assign(modalOverlay.style, {
-        position: 'fixed',
-        top: '0',
-        left: '0',
-        width: '100%',
-        height: '100%',
-        backgroundColor: 'rgba(0, 0, 0, 0.7)',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: '1000',
-        opacity: '0',
-        visibility: 'hidden',
-        transition: 'opacity 0.3s ease, visibility 0.3s ease'
-    });
-
+    // Crea el contenido del modal y le asigna la clase genérica .modal-content.
     const modalContent = document.createElement('div');
     modalContent.className = 'modal-content';
     
-    // Aplicar animación de "caída"
-    Object.assign(modalContent.style, {
-        transform: 'translateY(-50px)',
-        transition: 'transform 0.3s ease'
-    });
-
+    // Define el HTML interno del modal.
     modalContent.innerHTML = `
         <h2 style="text-align: center;">Confirmar Eliminación</h2>
         <p>¿Estás seguro de que quieres eliminar este mensaje? Esta acción es irreversible.</p>
@@ -190,28 +173,31 @@ function showDeleteConfirmationModal(messageId, cardElement) {
         </div>
     `;
 
+    // Añade el contenido al overlay y el overlay al body.
     modalOverlay.appendChild(modalContent);
     document.body.appendChild(modalOverlay);
 
+    // Muestra el modal añadiendo la clase 'visible'. La transición es manejada por CSS.
+    // Usamos un pequeño timeout para asegurar que el elemento esté en el DOM antes de que la transición comience.
     setTimeout(() => {
-        modalOverlay.style.opacity = '1';
-        modalOverlay.style.visibility = 'visible';
-        modalContent.style.transform = 'translateY(0)';
+        modalOverlay.classList.add('visible');
     }, 10);
 
+    // Función para cerrar el modal.
     const closeModal = () => {
-        modalOverlay.style.opacity = '0';
-        modalOverlay.style.visibility = 'hidden';
-        modalContent.style.transform = 'translateY(-50px)';
+        // Quita la clase 'visible' para iniciar la transición de desaparición.
+        modalOverlay.classList.remove('visible');
+        // Elimina el elemento del DOM después de que la transición de opacidad haya terminado.
         setTimeout(() => {
             if (modalOverlay) modalOverlay.remove();
-        }, 300); // Coincide con la duración de la transición
+        }, 300); // Coincide con la duración de la transición en messages.css
     };
 
     const confirmBtn = modalContent.querySelector('.confirm-delete-btn');
     const cancelBtn = modalContent.querySelector('.cancel-delete-btn');
     const modalError = modalContent.querySelector('.modal-error-message');
 
+    // Evento para el botón de confirmar eliminación.
     confirmBtn.addEventListener('click', async () => {
         confirmBtn.disabled = true;
         confirmBtn.textContent = 'Eliminando...';
@@ -234,8 +220,10 @@ function showDeleteConfirmationModal(messageId, cardElement) {
         }
     });
 
+    // Evento para el botón de cancelar.
     cancelBtn.addEventListener('click', closeModal);
 
+    // Evento para cerrar el modal si se hace clic fuera del contenido.
     modalOverlay.addEventListener('click', (e) => {
         if (e.target === modalOverlay) {
             closeModal();
