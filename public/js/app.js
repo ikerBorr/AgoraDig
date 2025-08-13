@@ -337,7 +337,28 @@ async function renderPage(path) {
             messageForm.reset();
         };
 
-        openModalBtn.addEventListener('click', showModal);
+        openModalBtn.addEventListener('click', async () => {
+            try {
+                // Se realiza una petición a /api/profile para comprobar el estado de la sesión.
+                const response = await fetch('/api/profile');
+
+                if (response.ok) {
+                    // Si la respuesta es exitosa, el usuario está logueado. Se muestra el modal.
+                    showModal();
+                } else if (response.status === 401) {
+                    // Si la respuesta es 401, el usuario no está logueado. Se le redirige al login.
+                    window.history.pushState({}, '', '/login');
+                    await renderPage('/login');
+                } else {
+                    // Manejo de otros posibles errores del servidor.
+                    throw new Error('No se pudo verificar el estado de la sesión. Inténtalo de nuevo.');
+                }
+            } catch (error) {
+                console.error('Error al verificar la autenticación:', error);
+                alert(error.message || 'Error de red. Por favor, comprueba tu conexión.');
+            }
+        });
+        
         closeModalBtn.addEventListener('click', hideModal);
         modalOverlay.addEventListener('click', (e) => {
             if (e.target === modalOverlay) hideModal(); // Cierra el modal si se hace clic fuera del contenido.

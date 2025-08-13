@@ -81,7 +81,7 @@ function initLoginForm() {
                 generalMessageDiv.textContent = result.message + ' ¡Bienvenido!';
                 // Redirige al perfil del usuario después de un breve instante.
                 setTimeout(() => {
-                    window.history.pushState({}, '', '/profile');
+                    window.history.pushState({}, '', '/home');
                     window.dispatchEvent(new PopStateEvent('popstate'));
                 }, 1500);
             } else {
