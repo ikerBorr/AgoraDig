@@ -458,7 +458,7 @@ app.post('/register',
 
         const birthDate = new Date(dateOfBirth);
         const minDate = new Date(); minDate.setHours(0,0,0,0); minDate.setFullYear(minDate.getFullYear() - 110);
-        const maxDate = new Date(); maxDate.setHours(0,0,0,0); maxDate.setFullYear(maxDate.getFullYear() - 10);
+        const maxDate = new Date(); maxDate.setHours(0,0,0,0); maxDate.setFullYear(maxDate.getFullYear() - 16);
         if (isNaN(birthDate.getTime()) || birthDate > maxDate || birthDate < minDate) {
             cleanupTempFile();
             return res.status(400).json({ errors: { dateOfBirth: 'La fecha de nacimiento proporcionada no es válida o eres demasiado joven para registrarte.' }});
