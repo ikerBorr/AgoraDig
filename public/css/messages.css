@@ -103,6 +103,77 @@
     font-size: 0.9rem;
     color: var(--color-texto-secundario);
 }
+
+/* --- Pie de la Tarjeta --- */
+.card-footer {
+    display: flex;
+    justify-content: space-between; /* Empuja los hashtags a la izquierda y el botón a la derecha. */
+    align-items: center; /* Centra verticalmente los elementos. */
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--color-borde-suave);
+}
+
+.message-hashtags {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--color-texto-secundario);
+}
+
+.delete-message-btn {
+    background: none;
+    border: none;
+    color: var(--color-texto-secundario);
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: 50%;
+    display: flex; /* Asegura que el SVG dentro esté centrado. */
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.delete-message-btn:hover {
+    color: #e74c3c; /* Color rojo para indicar una acción destructiva. */
+    background-color: var(--color-fondo-hover);
+}
+
+/* --- Estilos para el Modal de Confirmación de Eliminación --- */
+.modal-actions {
+    display: flex;
+    justify-content: flex-end; /* Alinea los botones a la derecha del modal. */
+    gap: 1rem; /* Espacio entre los botones. */
+    margin-top: 1.5rem;
+}
+
+/* Estilos genéricos para botones del modal para reutilización */
+.button-secondary, .button-danger {
+    padding: 0.6rem 1.2rem;
+    border: 1px solid transparent;
+    font-weight: bold;
+    border-radius: 5px;
+    font-size: 0.9rem;
+}
+
+.button-secondary {
+    background-color: var(--color-fondo-tarjeta);
+    border-color: var(--color-borde);
+    color: var(--color-texto);
+}
+
+.button-secondary:hover {
+    background-color: var(--color-fondo-hover);
+}
+
+.button-danger {
+    background-color: #c0392b; /* Rojo oscuro para acciones peligrosas. */
+    color: #fff;
+}
+
+.button-danger:hover {
+    background-color: #e74c3c; /* Rojo más brillante al pasar el cursor. */
+}
+
 /* --- Mensaje de Feed Vacío --- */
 .empty-feed-message {
     text-align: center;
@@ -119,7 +190,7 @@
 
 
 /* ==========================================================================
-   # Estilos del Modal de Creación (Anteriormente modal.css)
+   # Estilos del Modal de Creación
    ========================================================================== */
 
 /* --- Contenedor Principal del Modal y Superposición (Overlay) --- */
@@ -242,4 +313,8 @@
 
 .like-button.liked {
     fill: var(--color-like);
+}
+
+.like-button:hover {
+    stroke: var(--color-like);
 }

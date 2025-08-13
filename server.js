@@ -251,7 +251,8 @@ const messageSchema = new mongoose.Schema({
     content: { type: String, required: true, trim: true , maxlength: 1500},
     hashtags: [{ type: String, trim: true, lowercase: true, index: true }],
     likes: { type: [mongoose.Schema.Types.ObjectId], ref: 'User', default: [] },
-    messageStatus: { type: String, enum: ['active', 'deleted', 'deletedByModerator'], default: 'active', index: true }
+    messageStatus: { type: String, enum: ['active', 'deleted', 'deletedByModerator'], default: 'active', index: true },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
 }, {
     timestamps: true,
     toJSON: { virtuals: true }, 
@@ -913,6 +914,64 @@ app.post('/api/messages', isAuthenticated, async (req, res) => {
     } catch (error) {
         console.error('Error en POST /api/messages:', error);
         res.status(500).json({ message: 'Error en el servidor al crear el mensaje.' });
+    }
+});
+
+/**
+ * @route   DELETE /api/messages/:id
+ * @description Realiza un "soft delete" de un mensaje.
+ * La acción varía dependiendo de si el solicitante es el autor o un moderador/admin.
+ * @access  Private (requiere `isAuthenticated` middleware)
+ * @param {object} req.params - Parámetros de la ruta.
+ * @param {string} req.params.id - El ID del mensaje a eliminar.
+ * @returns {object} 200 - Mensaje de éxito.
+ * @returns {object} 403 - Permiso denegado.
+ * @returns {object} 404 - Mensaje o usuario no encontrado.
+ * @returns {object} 500 - Error del servidor.
+ */
+app.delete('/api/messages/:id', isAuthenticated, async (req, res) => {
+    try {
+        const messageId = req.params.id;
+        const userId = req.session.userId;
+
+        const [message, requester] = await Promise.all([
+            Message.findById(messageId),
+            User.findById(userId).select('role')
+        ]);
+
+        if (!message) {
+            return res.status(404).json({ message: 'Mensaje no encontrado.' });
+        }
+        if (!requester) {
+            return res.status(404).json({ message: 'Usuario solicitante no encontrado.' });
+        }
+
+        const isAuthor = message.sender.toString() === userId.toString();
+        const isModeratorOrAdmin = requester.role === 'admin' || requester.role === 'moderator';
+
+        if (!isAuthor && !isModeratorOrAdmin) {
+            return res.status(403).json({ message: 'No tienes permiso para eliminar este mensaje.' });
+        }
+        
+        // El mensaje ya ha sido eliminado, no hacer nada.
+        if (message.messageStatus !== 'active') {
+             return res.status(200).json({ message: 'El mensaje ya ha sido eliminado.' });
+        }
+
+        let updateData;
+        if (isAuthor) {
+            updateData = { messageStatus: 'deleted' };
+        } else { // Es moderador o admin
+            updateData = { messageStatus: 'deletedByModerator', deletedBy: userId };
+        }
+
+        await Message.findByIdAndUpdate(messageId, { $set: updateData });
+
+        res.status(200).json({ message: 'Mensaje eliminado correctamente.' });
+
+    } catch (error) {
+        console.error(`Error en DELETE /api/messages/${req.params.id}:`, error);
+        res.status(500).json({ message: 'Error en el servidor al eliminar el mensaje.' });
     }
 });
 

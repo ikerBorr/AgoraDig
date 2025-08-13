@@ -23,10 +23,12 @@ const loaderContainer = document.getElementById('loader-container');
  * @function createMessageCard
  * @description Crea y devuelve un elemento del DOM que representa una tarjeta de mensaje.
  * Esta función desacopla la lógica de creación de la tarjeta del renderizado principal del feed.
- * @param {object} message - El objeto del mensaje que contiene los datos a mostrar (título, contenido, autor, etc.).
+ * Ahora incluye un botón de eliminar condicional basado en los permisos del usuario actual.
+ * @param {object} message - El objeto del mensaje que contiene los datos a mostrar.
+ * @param {object|null} currentUser - El objeto del usuario logueado o null si no hay sesión. Contiene _id y role.
  * @returns {HTMLDivElement} El elemento del DOM `div` con la clase 'message-card', listo para ser insertado en el DOM.
  */
-function createMessageCard(message) {
+function createMessageCard(message, currentUser) {
     const card = document.createElement('div');
     card.className = 'message-card';
     card.setAttribute('data-message-id', message._id);
@@ -93,12 +95,35 @@ function createMessageCard(message) {
     content.textContent = message.content;
     cardBody.appendChild(content);
 
+    card.appendChild(cardBody);
+    
+    // --- Construcción del Pie de la Tarjeta ---
+    const cardFooter = document.createElement('div');
+    cardFooter.className = 'card-footer'; // Nuevo contenedor para hashtags y botón de eliminar
+
     const hashtagsSmall = document.createElement('small');
     hashtagsSmall.className = 'message-hashtags';
     hashtagsSmall.innerHTML = formattedHashtags;
-    cardBody.appendChild(hashtagsSmall);
+    cardFooter.appendChild(hashtagsSmall);
     
-    card.appendChild(cardBody);
+    // Lógica de visibilidad del botón de eliminar.
+    // El botón se muestra si el usuario actual es admin, moderador, o el autor del mensaje.
+    const canDelete = currentUser && (
+        currentUser.role === 'admin' ||
+        currentUser.role === 'moderator' ||
+        (message.sender && currentUser._id === message.sender._id)
+    );
+
+    if (canDelete) {
+        const deleteButton = document.createElement('button');
+        deleteButton.className = 'delete-message-btn';
+        deleteButton.title = 'Eliminar mensaje';
+        // Icono de papelera (SVG)
+        deleteButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-trash-2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`;
+        cardFooter.appendChild(deleteButton);
+    }
+
+    card.appendChild(cardFooter);
 
     return card;
 }
@@ -266,6 +291,17 @@ async function renderPage(path) {
         let currentPage = 1;
         let totalPages = 1;
 
+        // Se obtiene el perfil del usuario actual para pasarlo a `createMessageCard`.
+        let currentUser = null;
+        try {
+            const profileResponse = await fetch('/api/profile');
+            if (profileResponse.ok) {
+                currentUser = await profileResponse.json();
+            }
+        } catch (error) {
+            console.warn('No se pudo obtener el perfil del usuario (puede que no esté logueado).');
+        }
+
         const loadMessages = async () => {
             if (currentPage > totalPages) {
                 loadMoreBtn.classList.add('hidden');
@@ -294,7 +330,8 @@ async function renderPage(path) {
                 }
 
                 data.messages.forEach(message => {
-                    const messageCard = createMessageCard(message);
+                    // Se pasa `currentUser` a la función que crea la tarjeta.
+                    const messageCard = createMessageCard(message, currentUser);
                     messagesContainer.appendChild(messageCard);
                 });
 
@@ -337,6 +374,12 @@ async function renderPage(path) {
             messageForm.reset();
         };
 
+        /**
+         * @description Listener para el botón de abrir el modal de creación de mensajes.
+         * Antes de mostrar el modal, verifica si el usuario tiene una sesión activa haciendo
+         * una petición a un endpoint protegido. Si el usuario no está autenticado (recibe un 401),
+         * es redirigido a la página de login. De lo contrario, muestra el modal.
+         */
         openModalBtn.addEventListener('click', async () => {
             try {
                 // Se realiza una petición a /api/profile para comprobar el estado de la sesión.
@@ -358,7 +401,7 @@ async function renderPage(path) {
                 alert(error.message || 'Error de red. Por favor, comprueba tu conexión.');
             }
         });
-        
+
         closeModalBtn.addEventListener('click', hideModal);
         modalOverlay.addEventListener('click', (e) => {
             if (e.target === modalOverlay) hideModal(); // Cierra el modal si se hace clic fuera del contenido.
@@ -391,25 +434,56 @@ async function renderPage(path) {
             }
         });
 
-        // --- Lógica para manejar clics en botones de 'like' ---
+        // --- Lógica de eventos para likes y eliminación de mensajes ---
         messagesContainer.addEventListener('click', async (event) => {
+            // Manejo de Clic en Botón de 'Like'
             const likeButton = event.target.closest('.like-button');
-            if (!likeButton) return;
+            if (likeButton) {
+                const card = likeButton.closest('.message-card');
+                const messageId = card.getAttribute('data-message-id');
+                try {
+                    const response = await fetch(`/api/messages/${messageId}/like`, { method: 'POST' });
+                    if (response.status === 401) {
+                        if (confirm('Debes iniciar sesión para dar "Me gusta". ¿Quieres ir a la página de login?')) {
+                            window.history.pushState({}, '', '/login');
+                            renderPage('/login');
+                        }
+                        return;
+                    }
+                    if (!response.ok) throw new Error('Error del servidor al procesar el like.');
+                    const data = await response.json();
+                    const likeCountSpan = card.querySelector('.like-count');
+                    if (likeCountSpan) likeCountSpan.textContent = data.likeCount;
+                    likeButton.classList.toggle('liked', data.isLiked);
+                } catch (error) {
+                    console.error(error.message);
+                }
+                return; // Termina la ejecución para no procesar también el de eliminar.
+            }
 
-            const card = likeButton.closest('.message-card');
-            const messageId = card.getAttribute('data-message-id');
+            // Manejo de Clic en Botón de Eliminar
+            const deleteButton = event.target.closest('.delete-message-btn');
+            if (deleteButton) {
+                const card = deleteButton.closest('.message-card');
+                const messageId = card.getAttribute('data-message-id');
 
-            try {
-                const response = await fetch(`/api/messages/${messageId}/like`, { method: 'POST' });
-                if (response.status === 401) return; // Si no está autenticado, no hace nada.
-                if (!response.ok) throw new Error('Error del servidor al procesar el like.');
-                
-                const data = await response.json();
-                const likeCountSpan = card.querySelector('.like-count');
-                if (likeCountSpan) likeCountSpan.textContent = data.likeCount;
-                likeButton.classList.toggle('liked', data.isLiked);
-            } catch (error) {
-                console.error(error.message);
+                if (confirm('¿Estás seguro de que quieres eliminar este mensaje? Esta acción es irreversible.')) {
+                    try {
+                        const response = await fetch(`/api/messages/${messageId}`, { method: 'DELETE' });
+                        if (response.ok) {
+                            // Si la eliminación es exitosa, se elimina la tarjeta del DOM.
+                            card.style.transition = 'opacity 0.5s ease';
+                            card.style.opacity = '0';
+                            setTimeout(() => card.remove(), 500);
+                        } else {
+                            const errorData = await response.json();
+                            alert(`Error al eliminar: ${errorData.message}`);
+                        }
+                    } catch (error) {
+                        console.error('Error de red al eliminar el mensaje:', error);
+                        alert('Error de red al intentar eliminar el mensaje.');
+                    }
+                }
             }
         });
 
