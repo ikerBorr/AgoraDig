@@ -142,6 +142,107 @@ function scrollToElement(selector) {
     }
 }
 
+/**
+ * @function showDeleteConfirmationModal
+ * @description Muestra un modal de confirmación para eliminar un mensaje, replicando el estilo y comportamiento de otros modales de la aplicación.
+ * @param {string} messageId - El ID del mensaje a eliminar.
+ * @param {HTMLElement} cardElement - El elemento de la tarjeta del mensaje a eliminar del DOM.
+ */
+function showDeleteConfirmationModal(messageId, cardElement) {
+    if (document.querySelector('.delete-confirmation-overlay')) return;
+
+    const modalOverlay = document.createElement('div');
+    modalOverlay.className = 'delete-confirmation-overlay';
+
+    // Aplicar estilos en JS para replicar el comportamiento de #create-message-modal
+    Object.assign(modalOverlay.style, {
+        position: 'fixed',
+        top: '0',
+        left: '0',
+        width: '100%',
+        height: '100%',
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: '1000',
+        opacity: '0',
+        visibility: 'hidden',
+        transition: 'opacity 0.3s ease, visibility 0.3s ease'
+    });
+
+    const modalContent = document.createElement('div');
+    modalContent.className = 'modal-content';
+    
+    // Aplicar animación de "caída"
+    Object.assign(modalContent.style, {
+        transform: 'translateY(-50px)',
+        transition: 'transform 0.3s ease'
+    });
+
+    modalContent.innerHTML = `
+        <h2 style="text-align: center;">Confirmar Eliminación</h2>
+        <p>¿Estás seguro de que quieres eliminar este mensaje? Esta acción es irreversible.</p>
+        <div class="modal-error-message error-text hidden" style="text-align: center; margin-bottom: 1rem; font-weight: bold;"></div>
+        <div class="modal-actions">
+            <button class="button-secondary cancel-delete-btn">Cancelar</button>
+            <button class="button-danger confirm-delete-btn">Eliminar</button>
+        </div>
+    `;
+
+    modalOverlay.appendChild(modalContent);
+    document.body.appendChild(modalOverlay);
+
+    setTimeout(() => {
+        modalOverlay.style.opacity = '1';
+        modalOverlay.style.visibility = 'visible';
+        modalContent.style.transform = 'translateY(0)';
+    }, 10);
+
+    const closeModal = () => {
+        modalOverlay.style.opacity = '0';
+        modalOverlay.style.visibility = 'hidden';
+        modalContent.style.transform = 'translateY(-50px)';
+        setTimeout(() => {
+            if (modalOverlay) modalOverlay.remove();
+        }, 300); // Coincide con la duración de la transición
+    };
+
+    const confirmBtn = modalContent.querySelector('.confirm-delete-btn');
+    const cancelBtn = modalContent.querySelector('.cancel-delete-btn');
+    const modalError = modalContent.querySelector('.modal-error-message');
+
+    confirmBtn.addEventListener('click', async () => {
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Eliminando...';
+        try {
+            const response = await fetch(`/api/messages/${messageId}`, { method: 'DELETE' });
+            if (response.ok) {
+                closeModal();
+                cardElement.style.transition = 'opacity 0.5s ease';
+                cardElement.style.opacity = '0';
+                setTimeout(() => cardElement.remove(), 500);
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Error al eliminar el mensaje.');
+            }
+        } catch (error) {
+            modalError.textContent = error.message;
+            modalError.classList.remove('hidden');
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = 'Eliminar';
+        }
+    });
+
+    cancelBtn.addEventListener('click', closeModal);
+
+    modalOverlay.addEventListener('click', (e) => {
+        if (e.target === modalOverlay) {
+            closeModal();
+        }
+    });
+}
+
 
 // ===================================
 //  LÓGICA DE CARGA DE VISTAS
@@ -161,7 +262,6 @@ async function loadAndExecuteScript(templatePath) {
         oldScript.remove();
     }
     
-    // Mapeo centralizado de plantillas a sus scripts e inicializadores.
     const scriptMap = {
         './templates/register.html': './js/register.js',
         './templates/login.html': './js/login.js',
@@ -174,7 +274,7 @@ async function loadAndExecuteScript(templatePath) {
     };
 
     const scriptSrc = scriptMap[templatePath];
-    if (!scriptSrc) return; // No hay script asociado a esta plantilla.
+    if (!scriptSrc) return;
 
     const script = document.createElement('script');
     script.id = 'view-script';
@@ -205,7 +305,6 @@ async function fetchTemplate(path) {
         return await response.text();
     } catch (error) {
         console.error('Error al cargar la plantilla:', error);
-        // Carga la página de error como fallback.
         const response = await fetch('/templates/error-404.html');
         return await response.text();
     }
@@ -219,7 +318,6 @@ async function fetchTemplate(path) {
  * @param {HTMLElement} messagesContainer - El contenedor del DOM donde se encuentran las tarjetas de mensajes.
  */
 function startLikePolling(messagesContainer) {
-    // Si ya existe un intervalo, se limpia para evitar duplicados.
     if (window.pollInterval) clearInterval(window.pollInterval);
 
     window.pollInterval = setInterval(async () => {
@@ -230,24 +328,22 @@ function startLikePolling(messagesContainer) {
 
         try {
             const response = await fetch(`/api/messages/counts?ids=${messageIds.join(',')}`);
-            if (!response.ok) return; // Falla silenciosamente para no interrumpir al usuario.
+            if (!response.ok) return;
             
             const counts = await response.json();
             for (const messageId in counts) {
                 const card = messagesContainer.querySelector(`.message-card[data-message-id="${messageId}"]`);
                 if (card) {
                     const likeCountSpan = card.querySelector('.like-count');
-                    // Solo actualiza el DOM si el contador ha cambiado para optimizar el rendimiento.
                     if (likeCountSpan && likeCountSpan.textContent !== String(counts[messageId])) {
                         likeCountSpan.textContent = counts[messageId];
                     }
                 }
             }
         } catch (error) {
-            // El error se silencia intencionadamente para que fallos de red en el polling
-            // no generen alertas visuales o errores en la consola que molesten al usuario.
+            // No se muestra error para no molestar al usuario con fallos de red intermitentes.
         }
-    }, 10000); // Se actualiza cada 10 segundos.
+    }, 10000);
 }
 
 
@@ -264,14 +360,11 @@ function startLikePolling(messagesContainer) {
  * @returns {Promise<void>} Una promesa que se resuelve cuando la página ha sido completamente renderizada en el `appRoot`.
  */
 async function renderPage(path) {
-    // Extrae la ruta base sin anclas (#).
     const pathname = path.split('#')[0];
 
-    // Muestra el loader y oculta el contenido principal durante la carga.
     loaderContainer.classList.remove('hidden');
     appRoot.classList.add('hidden');
 
-    // Detiene cualquier sondeo de 'likes' de la vista anterior.
     if (window.pollInterval) {
         clearInterval(window.pollInterval);
         window.pollInterval = null;
@@ -279,19 +372,16 @@ async function renderPage(path) {
 
     let templatePath = '';
     
-    // --- Lógica para la ruta '/home' o la raíz '/' ---
     if (pathname === '/' || pathname === '/home') {
         appRoot.innerHTML = await fetchTemplate('./templates/home.html');
         document.title = 'Inicio';
         
-        // --- Inicialización de la lógica del feed de mensajes ---
         const messagesContainer = document.getElementById('messages-container');
         const loadMoreBtn = document.getElementById('load-more-btn');
         const feedLoader = document.getElementById('feed-loader');
         let currentPage = 1;
         let totalPages = 1;
 
-        // Se obtiene el perfil del usuario actual para pasarlo a `createMessageCard`.
         let currentUser = null;
         try {
             const profileResponse = await fetch('/api/profile');
@@ -316,7 +406,6 @@ async function renderPage(path) {
                 
                 const data = await response.json();
 
-                // Si es la primera página y no hay mensajes, muestra un mensaje de bienvenida.
                 if (currentPage === 1 && data.messages.length === 0) {
                     messagesContainer.innerHTML = `
                         <div class="empty-feed-message">
@@ -330,7 +419,6 @@ async function renderPage(path) {
                 }
 
                 data.messages.forEach(message => {
-                    // Se pasa `currentUser` a la función que crea la tarjeta.
                     const messageCard = createMessageCard(message, currentUser);
                     messagesContainer.appendChild(messageCard);
                 });
@@ -338,7 +426,6 @@ async function renderPage(path) {
                 totalPages = data.totalPages;
                 currentPage++;
 
-                // Muestra el botón 'Cargar más' solo si hay más páginas.
                 if (currentPage <= totalPages) {
                     loadMoreBtn.classList.remove('hidden');
                 } else {
@@ -346,21 +433,16 @@ async function renderPage(path) {
                 }
             } catch (error) {
                 console.error(error);
-                messagesContainer.innerHTML = `
-                    <p class="error-text">
-                        No se pudieron cargar los mensajes. Inténtalo de nuevo más tarde.
-                    </p>
-                `;
+                messagesContainer.innerHTML = `<p class="error-text">No se pudieron cargar los mensajes. Inténtalo de nuevo más tarde.</p>`;
             } finally {
                 feedLoader.classList.add('hidden');
             }
         };
 
         loadMoreBtn.addEventListener('click', loadMessages);
-        await loadMessages(); // Carga inicial de mensajes.
-        startLikePolling(messagesContainer); // Inicia el sondeo de 'likes'.
+        await loadMessages();
+        startLikePolling(messagesContainer);
 
-        // --- Lógica para el modal de creación de mensajes ---
         const openModalBtn = document.getElementById('open-create-message-modal-btn');
         const modalOverlay = document.getElementById('create-message-modal');
         const closeModalBtn = document.getElementById('close-modal-btn');
@@ -374,26 +456,15 @@ async function renderPage(path) {
             messageForm.reset();
         };
 
-        /**
-         * @description Listener para el botón de abrir el modal de creación de mensajes.
-         * Antes de mostrar el modal, verifica si el usuario tiene una sesión activa haciendo
-         * una petición a un endpoint protegido. Si el usuario no está autenticado (recibe un 401),
-         * es redirigido a la página de login. De lo contrario, muestra el modal.
-         */
         openModalBtn.addEventListener('click', async () => {
             try {
-                // Se realiza una petición a /api/profile para comprobar el estado de la sesión.
                 const response = await fetch('/api/profile');
-
                 if (response.ok) {
-                    // Si la respuesta es exitosa, el usuario está logueado. Se muestra el modal.
                     showModal();
                 } else if (response.status === 401) {
-                    // Si la respuesta es 401, el usuario no está logueado. Se le redirige al login.
                     window.history.pushState({}, '', '/login');
                     await renderPage('/login');
                 } else {
-                    // Manejo de otros posibles errores del servidor.
                     throw new Error('No se pudo verificar el estado de la sesión. Inténtalo de nuevo.');
                 }
             } catch (error) {
@@ -404,7 +475,7 @@ async function renderPage(path) {
 
         closeModalBtn.addEventListener('click', hideModal);
         modalOverlay.addEventListener('click', (e) => {
-            if (e.target === modalOverlay) hideModal(); // Cierra el modal si se hace clic fuera del contenido.
+            if (e.target === modalOverlay) hideModal();
         });
 
         messageForm.addEventListener('submit', async (e) => {
@@ -423,7 +494,6 @@ async function renderPage(path) {
                     throw new Error(responseData.message || 'Error desconocido al publicar.');
                 }
                 hideModal();
-                // Refresca el feed para mostrar el nuevo mensaje.
                 currentPage = 1;
                 totalPages = 1;
                 messagesContainer.innerHTML = '';
@@ -434,9 +504,7 @@ async function renderPage(path) {
             }
         });
 
-        // --- Lógica de eventos para likes y eliminación de mensajes ---
         messagesContainer.addEventListener('click', async (event) => {
-            // Manejo de Clic en Botón de 'Like'
             const likeButton = event.target.closest('.like-button');
             if (likeButton) {
                 const card = likeButton.closest('.message-card');
@@ -458,38 +526,19 @@ async function renderPage(path) {
                 } catch (error) {
                     console.error(error.message);
                 }
-                return; // Termina la ejecución para no procesar también el de eliminar.
+                return;
             }
 
-            // Manejo de Clic en Botón de Eliminar
             const deleteButton = event.target.closest('.delete-message-btn');
             if (deleteButton) {
                 const card = deleteButton.closest('.message-card');
                 const messageId = card.getAttribute('data-message-id');
-
-                if (confirm('¿Estás seguro de que quieres eliminar este mensaje? Esta acción es irreversible.')) {
-                    try {
-                        const response = await fetch(`/api/messages/${messageId}`, { method: 'DELETE' });
-                        if (response.ok) {
-                            // Si la eliminación es exitosa, se elimina la tarjeta del DOM.
-                            card.style.transition = 'opacity 0.5s ease';
-                            card.style.opacity = '0';
-                            setTimeout(() => card.remove(), 500);
-                        } else {
-                            const errorData = await response.json();
-                            alert(`Error al eliminar: ${errorData.message}`);
-                        }
-                    } catch (error) {
-                        console.error('Error de red al eliminar el mensaje:', error);
-                        alert('Error de red al intentar eliminar el mensaje.');
-                    }
-                }
+                showDeleteConfirmationModal(messageId, card);
             }
         });
 
-        templatePath = ''; // Indica que el contenido ya fue renderizado dinámicamente.
+        templatePath = '';
 
-    // --- Lógica para rutas estáticas o semi-estáticas ---
     } else if (pathname === '/about' || pathname === '/about-AgoraDig' || pathname === '/about-us') {
         templatePath = './templates/about.html';
         document.title = 'Acerca de';
@@ -506,14 +555,12 @@ async function renderPage(path) {
         templatePath = './templates/login.html';
         document.title = 'Iniciar Sesión';
     
-    // --- Lógica para la vista de perfil de otros usuarios ---
     } else if (path.startsWith('/view-profile')) {
         try {
             const params = new URLSearchParams(window.location.search);
             const username = params.get('username');
             if (!username) throw new Error('Nombre de usuario no especificado en la URL.');
 
-            // Intenta determinar el rol del usuario que está viendo el perfil para solicitar datos de moderación si tiene permisos.
             let viewerRole = null;
             try {
                 const selfProfileResponse = await fetch('/api/profile');
@@ -521,7 +568,7 @@ async function renderPage(path) {
                     const viewerData = await selfProfileResponse.json();
                     viewerRole = viewerData.role;
                 }
-            } catch (e) { /* El usuario no está logueado, se ignora el error. */ }
+            } catch (e) { /* El usuario no está logueado, se ignora. */ }
 
             let apiUrl = `/api/users/username/${encodeURIComponent(username)}`;
             if (viewerRole === 'admin' || viewerRole === 'moderator') {
@@ -531,29 +578,23 @@ async function renderPage(path) {
             const userResponse = await fetch(apiUrl);
             if (!userResponse.ok) {
                 const errorData = await userResponse.json();
-                // Si el usuario fue ELIMINADO (410 Gone), muestra un mensaje específico.
                 if (userResponse.status === 410) {
-                    // Carga la plantilla de error 410
                     appRoot.innerHTML = await fetchTemplate('../templates/error-410.html');
                     document.title = 'ERROR 410';
-                    templatePath = ''; // Evita que se siga procesando.
-                    // Oculta el loader y muestra el contenido antes de salir.
+                    templatePath = '';
                     loaderContainer.classList.add('hidden');
                     appRoot.classList.remove('hidden');
-                    return; // Termina la ejecución para esta ruta.
+                    return;
                 }
-                // Para cualquier otro error (ej. 404), lanza la excepción para el catch general.
                 throw new Error(errorData.message || 'No se pudieron cargar los datos del perfil.');
             }
             
-
             const userData = await userResponse.json();
             let profileHtml = await fetchTemplate('./templates/view-profile.html');
             const joinDate = new Date(userData.createdAt).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
             
             profileHtml = profileHtml.replace(/{{createdAt}}/g, joinDate);
             
-            // --- Lógica para mostrar controles de administrador/moderador ---
             let adminControlsHtml = '';
             let moderationInfoHtml = `
                 <div class="moderation-details">
@@ -615,7 +656,6 @@ async function renderPage(path) {
                  `;
             }
 
-            // Inyección de los datos en la plantilla.
             profileHtml = profileHtml
                 .replace('{{moderationInfo}}', moderationInfoHtml)
                 .replace('{{adminControls}}', adminControlsHtml);
@@ -632,7 +672,6 @@ async function renderPage(path) {
             appRoot.querySelector('.profile-username').textContent = `@${userData.username}`;
             appRoot.querySelector('.profile-description').textContent = userData.description || 'Este usuario aún no ha añadido una descripción.';
 
-            // Listener para el formulario de administración.
             if (viewerRole === 'admin' || viewerRole === 'moderator') {
                 const adminForm = document.getElementById('admin-edit-form');
                 if (adminForm) {
@@ -649,7 +688,6 @@ async function renderPage(path) {
                             messageEl.textContent = result.message;
                             messageEl.classList.remove('error-text'); messageEl.classList.add('success-text'); messageEl.classList.remove('hidden');
                             
-                            // Actualiza la UI con los nuevos datos de moderación sin recargar.
                             const modInfoContainer = document.querySelector('#moderation-info-display');
                             if (modInfoContainer) {
                                  modInfoContainer.innerHTML = `<br><div class="moderation-details"><span class="role-badge">ROL: ${result.user.role}</span><span class="status-badge status-${result.user.userStatus}">ESTADO: ${result.user.userStatus}</span><span class="strikes-badge">STRIKES: ${result.user.strikes}</span></div>`;
@@ -661,7 +699,7 @@ async function renderPage(path) {
                     });
                 }
             }
-            templatePath = ''; // Renderizado dinámico completado.
+            templatePath = '';
 
         } catch (error) {
             console.error('Error al renderizar el perfil de usuario:', error);
@@ -669,12 +707,10 @@ async function renderPage(path) {
             document.title = 'ERROR 404';
         }
     
-    // --- Lógica para la vista del perfil del propio usuario ---
     } else if (path.startsWith('/profile')) {
         try {
             const response = await fetch('/api/profile');
             if (!response.ok) {
-                // Si no está autorizado (no logueado), se redirige al login.
                 if (response.status === 401) {
                     window.history.pushState({}, '', '/login');
                     await renderPage('/login');
@@ -690,7 +726,6 @@ async function renderPage(path) {
             profileHtml = profileHtml.replace('{{createdAt}}', joinDate);
             appRoot.innerHTML = profileHtml;
             
-            // Rellena los datos del perfil.
             const profilePicture = appRoot.querySelector('.profile-picture');
             if (profilePicture) {
                 profilePicture.src = userData.profilePicturePath || '../images/default-avatar.webp';
@@ -712,8 +747,7 @@ async function renderPage(path) {
             }
 
             document.title = userData.username;
-            templatePath = ''; // Contenido dinámico renderizado.
-            // Carga el script específico para la página de perfil (para el modal de edición, etc.).
+            templatePath = '';
             await loadAndExecuteScript('./templates/profile.html');
     
         } catch (error) {
@@ -722,7 +756,6 @@ async function renderPage(path) {
             document.title = 'ERROR 404';
         }
 
-    // --- Lógica para otras rutas estáticas ---
     } else if (pathname === '/terms-and-conditions') {
         templatePath = './templates/terms-and-conditions.html';
         document.title = 'Términos y Condiciones';
@@ -730,33 +763,28 @@ async function renderPage(path) {
         templatePath = './templates/privacy-policy.html';
         document.title = 'Política de Privacidad';
 
-    // --- Ruta por defecto para cualquier otra URL no reconocida ---
     } else {
         templatePath = './templates/error-404.html';
         document.title = 'ERROR 404';
     }
 
-    // Si `templatePath` tiene un valor, significa que es una página estática que necesita ser cargada.
     if (templatePath) {
         appRoot.innerHTML = await fetchTemplate(templatePath);
     }
     
-    // Lógica específica post-renderizado para la página de éxito de registro.
     if (pathname === '/register-success') {
         const pin = sessionStorage.getItem('registrationPin');
         const pinDisplayElement = document.getElementById('recovery-pin-display');
         if (pin && pinDisplayElement) {
             pinDisplayElement.textContent = pin;
-            sessionStorage.removeItem('registrationPin'); // El PIN se muestra una sola vez.
+            sessionStorage.removeItem('registrationPin');
         }
     }
 
-    // Carga el script asociado si la plantilla no fue renderizada dinámicamente.
     if(templatePath) {
         await loadAndExecuteScript(templatePath);
     }
 
-    // Oculta el loader y muestra el contenido de la aplicación.
     loaderContainer.classList.add('hidden'); 
     appRoot.classList.remove('hidden');
 }
@@ -770,28 +798,24 @@ async function renderPage(path) {
  */
 async function handleNavClick(event) {
     const targetLink = event.target.closest('a');
-    // Ignora clics que no son en enlaces, enlaces sin href, enlaces que abren en nueva pestaña o enlaces de email.
     if (!targetLink || !targetLink.hasAttribute('href') || targetLink.target || targetLink.href.includes('mailto:')) {
         return;
     }
 
-    event.preventDefault(); // Previene la recarga de la página.
+    event.preventDefault();
 
     const targetUrl = new URL(targetLink.href);
     const newRelativePath = targetUrl.pathname + targetUrl.search;
     const currentRelativePath = window.location.pathname + window.location.search;
     const targetHash = targetUrl.hash;
 
-    // Solo renderiza la nueva página si la ruta ha cambiado.
     if (currentRelativePath !== newRelativePath) {
         window.history.pushState({}, '', newRelativePath);
         await renderPage(newRelativePath);
-        // Si hay un ancla, desplaza la vista hacia ella después de renderizar.
         if (targetHash) {
             setTimeout(() => scrollToElement(targetHash), 100);
         }
     } else if (targetHash) {
-        // Si la ruta es la misma pero hay un ancla, solo desplaza la vista.
         scrollToElement(targetHash);
     }
 }
@@ -800,9 +824,6 @@ async function handleNavClick(event) {
 //  INICIALIZACIÓN DE LA APLICACIÓN
 // ===================================
 
-/** @description Manejador de eventos global para los clics en enlaces, permitiendo la navegación SPA. */
 document.addEventListener('click', handleNavClick);
-/** @description Maneja los eventos de navegación del historial del navegador (botones de atrás/adelante). */
 window.addEventListener('popstate', () => { renderPage(window.location.pathname + window.location.search); });
-/** @description Renderiza la página inicial correspondiente a la URL actual cuando el DOM está completamente cargado. */
 document.addEventListener('DOMContentLoaded', () => { renderPage(window.location.pathname + window.location.search); });
