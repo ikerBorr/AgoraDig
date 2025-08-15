@@ -29,7 +29,7 @@ const loaderContainer = document.getElementById('loader-container');
  * @returns {HTMLDivElement} El elemento del DOM `div` con la clase 'message-card', listo para ser insertado en el DOM.
  */
 function createMessageCard(message, currentUser) {
-    const card = document.createElement('div');
+    const card = document.createElement('article');
     card.className = 'message-card';
     card.setAttribute('data-message-id', message._id);
 
@@ -154,9 +154,9 @@ function showDeleteConfirmationModal(messageId, cardElement) {
     // Previene la creación de múltiples modales.
     if (document.querySelector('.delete-confirmation-overlay')) return;
 
-    // Crea el overlay del modal y le asigna su clase CSS principal.
+    // Crea el overlay del modal y le asigna sus clases para que aparezca visible directamente.
     const modalOverlay = document.createElement('div');
-    modalOverlay.className = 'delete-confirmation-overlay';
+    modalOverlay.className = 'delete-confirmation-overlay visible';
 
     // Crea el contenido del modal y le asigna la clase genérica .modal-content.
     const modalContent = document.createElement('div');
@@ -177,20 +177,11 @@ function showDeleteConfirmationModal(messageId, cardElement) {
     modalOverlay.appendChild(modalContent);
     document.body.appendChild(modalOverlay);
 
-    // Muestra el modal añadiendo la clase 'visible'. La transición es manejada por CSS.
-    // Usamos un pequeño timeout para asegurar que el elemento esté en el DOM antes de que la transición comience.
-    setTimeout(() => {
-        modalOverlay.classList.add('visible');
-    }, 10);
-
-    // Función para cerrar el modal.
+    // Función para cerrar el modal de forma instantánea.
     const closeModal = () => {
-        // Quita la clase 'visible' para iniciar la transición de desaparición.
-        modalOverlay.classList.remove('visible');
-        // Elimina el elemento del DOM después de que la transición de opacidad haya terminado.
-        setTimeout(() => {
-            if (modalOverlay) modalOverlay.remove();
-        }, 300); // Coincide con la duración de la transición en messages.css
+        if (modalOverlay) {
+            modalOverlay.remove();
+        }
     };
 
     const confirmBtn = modalContent.querySelector('.confirm-delete-btn');
@@ -450,8 +441,10 @@ async function renderPage(path) {
                 if (response.ok) {
                     showModal();
                 } else if (response.status === 401) {
-                    window.history.pushState({}, '', '/login');
-                    await renderPage('/login');
+                    if (confirm('Debes iniciar sesión para publicar un mensaje. ¿Quieres ir a la página de login?')) {
+                        window.history.pushState({}, '', '/login');
+                        await renderPage('/login');
+                    }
                 } else {
                     throw new Error('No se pudo verificar el estado de la sesión. Inténtalo de nuevo.');
                 }
