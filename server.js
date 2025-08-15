@@ -857,8 +857,8 @@ app.get('/api/messages', async (req, res) => {
  * @description Crea un nuevo mensaje en el foro.
  * @access  Private (requiere `isAuthenticated` middleware)
  * @param {object} req.body - Cuerpo de la petición.
- * @param {string} req.body.title - El título del mensaje (max 100 caracteres).
- * @param {string} req.body.content - El contenido del mensaje (max 1500 caracteres).
+ * @param {string} req.body.title - El título del mensaje (entre 3 y 100 caracteres).
+ * @param {string} req.body.content - El contenido del mensaje (entre 10 y 1500 caracteres).
  * @param {string} [req.body.hashtags] - Cadena con hashtags separados por espacios (ej: "#tag1 #tag2").
  * @returns {object} 201 - El mensaje recién creado, populado con los datos del autor.
  * @returns {object} 400 - Error de validación (campos vacíos o exceden longitud).
@@ -885,11 +885,11 @@ app.post('/api/messages', isAuthenticated, async (req, res) => {
         if (!content || content.trim().length === 0) {
             return res.status(400).json({ message: 'El contenido es obligatorio.' });
         }
-        if (title.length > 100) {
-            return res.status(400).json({ message: 'El título no puede exceder los 100 caracteres.' });
+        if (title.trim().length > 100 || title.trim().length < 3) {
+            return res.status(400).json({ message: 'El título debe tener entre 3 y 100 caracteres.' });
         }
-        if (content.length > 1500) {
-            return res.status(400).json({ message: 'El contenido no puede exceder los 1500 caracteres.' });
+        if (content.trim().length > 1500 || content.trim().length < 10) {
+            return res.status(400).json({ message: 'El contenido debe tener entre 10 y 1500 caracteres.' });
         }
 
         // Parsea los hashtags de una cadena de texto a un array.
