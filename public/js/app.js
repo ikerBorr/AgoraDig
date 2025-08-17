@@ -74,19 +74,6 @@ function createMessageCard(message, currentUser) {
     const cardActions = document.createElement('div');
     cardActions.className = 'card-actions';
 
-    const replyInfo = document.createElement('div');
-    replyInfo.className = 'reply-info';
-    replyInfo.innerHTML = `
-        <button class="reply-message-btn" title="Responder">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="9 17 4 12 9 7"></polyline>
-                <path d="M20 18v-2a4 4 0 0 0-4-4H4"></path>
-            </svg>
-        </button>
-        <span class="reply-count">${replyCount}</span>
-    `;
-    cardActions.appendChild(replyInfo);
-
     const likesInfo = document.createElement('div');
     likesInfo.className = 'likes-info';
     likesInfo.innerHTML = `
@@ -96,6 +83,17 @@ function createMessageCard(message, currentUser) {
         </svg>
     `;
     cardActions.appendChild(likesInfo);
+    
+    const replyInfo = document.createElement('div');
+    replyInfo.className = 'reply-info';
+    replyInfo.innerHTML = `
+        <span class="reply-count">${replyCount}</span>
+        <svg class="reply-message-btn" title="Responder" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 17 4 12 9 7"></polyline>
+            <path d="M20 18v-2a4 4 0 0 0-4-4H4"></path>
+        </svg>
+    `;
+    cardActions.appendChild(replyInfo);
 
     cardHeader.appendChild(cardActions);
     card.appendChild(cardHeader);

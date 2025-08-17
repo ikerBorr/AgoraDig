@@ -349,3 +349,13 @@ textarea {
     transform: none;
     transition: none;
 }
+
+/* --- Botón de "Responder" --- */
+.reply-message-btn {
+    cursor: pointer;
+    transition: stroke 0.2s ease;
+}
+
+.reply-message-btn:hover {
+    stroke: var(--color-enlace);
+}
