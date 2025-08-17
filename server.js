@@ -251,7 +251,8 @@ const messageSchema = new mongoose.Schema({
     content: { type: String, required: true, trim: true , maxlength: 1500},
     hashtags: [{ type: String, trim: true, lowercase: true, index: true }],
     likes: { type: [mongoose.Schema.Types.ObjectId], ref: 'User', default: [] },
-    messageStatus: { type: String, enum: ['active', 'deleted', 'deletedByModerator, deletedByAdmin'], default: 'active', index: true },
+    replies: { type: [mongoose.Schema.Types.ObjectId], ref: 'Message', default: [] },
+    messageStatus: { type: String, enum: ['active', 'deleted', 'deletedByModerator', 'deletedByAdmin'], default: 'active', index: true },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
 }, {
     timestamps: true,
@@ -269,6 +270,14 @@ messageSchema.index({ messageStatus: 1, createdAt: -1 });
  * @returns {number} El número total de 'likes'.
  */
 messageSchema.virtual('likeCount').get(function() { return this.likes.length; });
+
+/**
+ * @virtual replyCount
+ * @description Campo virtual que calcula el número de respuestas de un mensaje dinámicamente.
+ * @returns {number} El número total de respuestas.
+ */
+messageSchema.virtual('replyCount').get(function() { return this.replies.length; });
+
 const Message = mongoose.model('Message', messageSchema);
 
 
@@ -815,15 +824,14 @@ app.get('/api/messages', async (req, res) => {
         const limit = parseInt(req.query.limit, 10) || 10;
         const skip = (page - 1) * limit;
 
-        let messages = await Message.find({ messageStatus: 'active' })
+        const messages = await Message.find({ messageStatus: 'active' })
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit)
-            .populate('sender', 'username profilePicturePath') // Obtiene datos del autor.
-            .lean(); // Usa .lean() para obtener objetos JS planos, más rápido para lectura.
+            .populate('sender', 'username profilePicturePath')
+            .lean({ virtuals: true }); // Usar .lean() con virtuals para rendimiento.
 
-        messages = messages.map(message => {
-            // Maneja el caso de que el usuario emisor haya sido eliminado.
+        const processedMessages = messages.map(message => {
             if (message.sender) {
                 message.sender.profilePicturePath = getValidProfilePicturePath(message.sender.profilePicturePath);
             } else {
@@ -832,7 +840,6 @@ app.get('/api/messages', async (req, res) => {
                     profilePicturePath: DEFAULT_AVATAR_PATH
                 };
             }
-            // Añade un campo booleano `isLiked` para que el frontend sepa si mostrar el like como activo.
             const isLiked = req.session.userId ? message.likes.some(like => like.toString() === req.session.userId.toString()) : false;
 
             return { ...message, isLiked };
@@ -841,7 +848,7 @@ app.get('/api/messages', async (req, res) => {
         const totalMessages = await Message.countDocuments({ messageStatus: 'active' });
 
         res.status(200).json({
-            messages,
+            messages: processedMessages,
             totalPages: Math.ceil(totalMessages / limit),
             currentPage: page
         });
@@ -916,6 +923,75 @@ app.post('/api/messages', isAuthenticated, async (req, res) => {
         res.status(500).json({ message: 'Error en el servidor al crear el mensaje.' });
     }
 });
+
+/**
+ * @route   POST /api/messages/:id/reply
+ * @description Crea una respuesta a un mensaje existente.
+ * @access  Private (requiere `isAuthenticated` middleware)
+ * @param {object} req.params - Parámetros de la ruta.
+ * @param {string} req.params.id - El ID del mensaje al que se está respondiendo.
+ * @param {object} req.body - Cuerpo de la petición con `title`, `content` y `hashtags`.
+ * @returns {object} 201 - La respuesta recién creada.
+ * @returns {object} 400 - Error de validación.
+ * @returns {object} 403 - Usuario baneado.
+ * @returns {object} 404 - Mensaje original o usuario no encontrado.
+ * @returns {object} 500 - Error del servidor.
+ */
+app.post('/api/messages/:id/reply', isAuthenticated, async (req, res) => {
+    const parentMessageId = req.params.id;
+
+    try {
+        const { title, content, hashtags } = req.body;
+
+        const [user, parentMessage] = await Promise.all([
+            User.findById(req.session.userId).select('userStatus'),
+            Message.findById(parentMessageId)
+        ]);
+        
+        if (!user) {
+            return res.status(404).json({ message: 'Usuario no encontrado.' });
+        }
+        if (user.userStatus === 'banned') {
+            return res.status(403).json({ message: 'Tu cuenta ha sido suspendida. No puedes responder a mensajes.' });
+        }
+        if (!parentMessage) {
+            return res.status(404).json({ message: 'El mensaje al que intentas responder no existe.' });
+        }
+
+        // --- Validación del contenido del mensaje ---
+        if (!title || title.trim().length === 0) return res.status(400).json({ message: 'El título es obligatorio.' });
+        if (!content || content.trim().length === 0) return res.status(400).json({ message: 'El contenido es obligatorio.' });
+        if (title.trim().length > 100 || title.trim().length < 3) return res.status(400).json({ message: 'El título debe tener entre 3 y 100 caracteres.' });
+        if (content.trim().length > 1500 || content.trim().length < 10) return res.status(400).json({ message: 'El contenido debe tener entre 10 y 1500 caracteres.' });
+
+        const parsedHashtags = hashtags ? hashtags.match(/#(\w+)/g)?.map(h => h.substring(1)) || [] : [];
+        
+        // 1. Crear el nuevo mensaje de respuesta
+        const newReply = new Message({
+            title,
+            content,
+            hashtags: parsedHashtags,
+            sender: req.session.userId,
+            referencedMessage: parentMessageId
+        });
+        await newReply.save();
+        
+        // 2. Añadir la ID de la respuesta al array del mensaje padre
+        await Message.updateOne({ _id: parentMessageId }, { $push: { replies: newReply._id } });
+
+        // Poblar y devolver la respuesta
+        const populatedReply = await newReply.populate('sender', 'username profilePicturePath');
+        const responseMessage = populatedReply.toObject();
+        responseMessage.sender.profilePicturePath = getValidProfilePicturePath(responseMessage.sender.profilePicturePath);
+        
+        res.status(201).json(responseMessage);
+
+    } catch (error) {
+        console.error('Error en POST /api/messages/:id/reply:', error);
+        res.status(500).json({ message: 'Error en el servidor al crear la respuesta.' });
+    }
+});
+
 
 /**
  * @route   DELETE /api/messages/:id

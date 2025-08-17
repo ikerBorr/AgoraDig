@@ -37,7 +37,8 @@ function createMessageCard(message, currentUser) {
     const author = message.sender || { username: 'Usuario Eliminado', profilePicturePath: '../images/default-avatar.webp', _id: null };
     const { _id: authorId, username: authorUsername, profilePicturePath: authorAvatar } = author;
 
-    // Se calcula el número de 'likes' y se prepara la clase CSS si el usuario actual ha dado 'like'.
+    // Se preparan los contadores y clases CSS.
+    const replyCount = message.replyCount !== undefined ? message.replyCount : (message.replies ? message.replies.length : 0);
     const likeCount = message.likeCount !== undefined ? message.likeCount : (message.likes ? message.likes.length : 0);
     const likedClass = message.isLiked ? 'liked' : '';
     const formattedHashtags = message.hashtags && message.hashtags.length > 0 ? message.hashtags.map(tag => `<a href="#" class="hashtag-link">#${tag}</a>`).join(' ') : '';
@@ -70,6 +71,22 @@ function createMessageCard(message, currentUser) {
     }
     cardHeader.appendChild(authorInfo);
 
+    const cardActions = document.createElement('div');
+    cardActions.className = 'card-actions';
+
+    const replyInfo = document.createElement('div');
+    replyInfo.className = 'reply-info';
+    replyInfo.innerHTML = `
+        <button class="reply-message-btn" title="Responder">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 17 4 12 9 7"></polyline>
+                <path d="M20 18v-2a4 4 0 0 0-4-4H4"></path>
+            </svg>
+        </button>
+        <span class="reply-count">${replyCount}</span>
+    `;
+    cardActions.appendChild(replyInfo);
+
     const likesInfo = document.createElement('div');
     likesInfo.className = 'likes-info';
     likesInfo.innerHTML = `
@@ -78,7 +95,9 @@ function createMessageCard(message, currentUser) {
             <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
         </svg>
     `;
-    cardHeader.appendChild(likesInfo);
+    cardActions.appendChild(likesInfo);
+
+    cardHeader.appendChild(cardActions);
     card.appendChild(cardHeader);
 
     // --- Construcción del Cuerpo de la Tarjeta ---
@@ -427,32 +446,46 @@ async function renderPage(path) {
         const closeModalBtn = document.getElementById('close-modal-btn');
         const messageForm = document.getElementById('create-message-form');
         const modalError = document.getElementById('modal-error-message');
+        const modalTitle = document.getElementById('modal-title');
 
         const showModal = () => modalOverlay.classList.remove('hidden');
         const hideModal = () => {
             modalOverlay.classList.add('hidden');
             modalError.classList.add('hidden');
             messageForm.reset();
+            messageForm.removeAttribute('data-parent-id');
+            if(modalTitle) modalTitle.textContent = 'Crear un Nuevo Mensaje';
         };
 
-        openModalBtn.addEventListener('click', async () => {
+        async function checkAuth() {
             try {
                 const response = await fetch('/api/profile');
-                if (response.ok) {
-                    showModal();
-                } else if (response.status === 401) {
-                    if (confirm('Debes iniciar sesión para publicar un mensaje. ¿Quieres ir a la página de login?')) {
+                if (response.ok) return true;
+
+                if (response.status === 401) {
+                    if (confirm('Debes iniciar sesión para realizar esta acción. ¿Quieres ir a la página de login?')) {
                         window.history.pushState({}, '', '/login');
                         await renderPage('/login');
                     }
-                } else {
-                    throw new Error('No se pudo verificar el estado de la sesión. Inténtalo de nuevo.');
+                    return false;
                 }
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'No se pudo verificar el estado de la sesión.');
             } catch (error) {
                 console.error('Error al verificar la autenticación:', error);
                 alert(error.message || 'Error de red. Por favor, comprueba tu conexión.');
+                return false;
             }
-        });
+        }
+        
+        const checkAuthAndShowModal = async () => {
+            const isAuthenticated = await checkAuth();
+            if (isAuthenticated) {
+                showModal();
+            }
+        };
+        
+        openModalBtn.addEventListener('click', checkAuthAndShowModal);
 
         closeModalBtn.addEventListener('click', hideModal);
         modalOverlay.addEventListener('click', (e) => {
@@ -464,8 +497,12 @@ async function renderPage(path) {
             modalError.classList.add('hidden');
             const formData = new FormData(messageForm);
             const data = Object.fromEntries(formData.entries());
+            
+            const parentId = messageForm.getAttribute('data-parent-id');
+            const url = parentId ? `/api/messages/${parentId}/reply` : '/api/messages';
+
             try {
-                const response = await fetch('/api/messages', {
+                const response = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
@@ -487,30 +524,38 @@ async function renderPage(path) {
 
         messagesContainer.addEventListener('click', async (event) => {
             const likeButton = event.target.closest('.like-button');
-            if (likeButton) {
-                const card = likeButton.closest('.message-card');
+            const replyButton = event.target.closest('.reply-message-btn');
+            const deleteButton = event.target.closest('.delete-message-btn');
+
+            if (replyButton) {
+                const card = replyButton.closest('.message-card');
                 const messageId = card.getAttribute('data-message-id');
-                try {
-                    const response = await fetch(`/api/messages/${messageId}/like`, { method: 'POST' });
-                    if (response.status === 401) {
-                        if (confirm('Debes iniciar sesión para dar "Me gusta". ¿Quieres ir a la página de login?')) {
-                            window.history.pushState({}, '', '/login');
-                            renderPage('/login');
-                        }
-                        return;
+                messageForm.setAttribute('data-parent-id', messageId);
+                if(modalTitle) modalTitle.textContent = 'Responder al Mensaje';
+                await checkAuthAndShowModal();
+                return;
+            }
+            
+            if (likeButton) {
+                const isAuthenticated = await checkAuth();
+                if (isAuthenticated) {
+                    const card = likeButton.closest('.message-card');
+                    const messageId = card.getAttribute('data-message-id');
+                    try {
+                        const response = await fetch(`/api/messages/${messageId}/like`, { method: 'POST' });
+                        if (!response.ok) throw new Error('Error del servidor al procesar el like.');
+                        
+                        const data = await response.json();
+                        const likeCountSpan = card.querySelector('.like-count');
+                        if (likeCountSpan) likeCountSpan.textContent = data.likeCount;
+                        likeButton.classList.toggle('liked', data.isLiked);
+                    } catch (error) {
+                        console.error(error.message);
                     }
-                    if (!response.ok) throw new Error('Error del servidor al procesar el like.');
-                    const data = await response.json();
-                    const likeCountSpan = card.querySelector('.like-count');
-                    if (likeCountSpan) likeCountSpan.textContent = data.likeCount;
-                    likeButton.classList.toggle('liked', data.isLiked);
-                } catch (error) {
-                    console.error(error.message);
                 }
                 return;
             }
 
-            const deleteButton = event.target.closest('.delete-message-btn');
             if (deleteButton) {
                 const card = deleteButton.closest('.message-card');
                 const messageId = card.getAttribute('data-message-id');
