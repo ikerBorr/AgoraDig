@@ -251,7 +251,7 @@ const messageSchema = new mongoose.Schema({
     content: { type: String, required: true, trim: true , maxlength: 1500},
     hashtags: [{ type: String, trim: true, lowercase: true, index: true }],
     likes: { type: [mongoose.Schema.Types.ObjectId], ref: 'User', default: [] },
-    messageStatus: { type: String, enum: ['active', 'deleted', 'deletedByModerator'], default: 'active', index: true },
+    messageStatus: { type: String, enum: ['active', 'deleted', 'deletedByModerator, deletedByAdmin'], default: 'active', index: true },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
 }, {
     timestamps: true,
@@ -961,8 +961,12 @@ app.delete('/api/messages/:id', isAuthenticated, async (req, res) => {
         let updateData;
         if (isAuthor) {
             updateData = { messageStatus: 'deleted' };
-        } else { // Es moderador o admin
+        } 
+        else if (requester.role === 'moderator') {
             updateData = { messageStatus: 'deletedByModerator', deletedBy: userId };
+        }
+        else if (requester.role === 'admin') {
+            updateData = { messageStatus: 'deletedByAdmin', deletedBy: userId };
         }
 
         await Message.findByIdAndUpdate(messageId, { $set: updateData });
