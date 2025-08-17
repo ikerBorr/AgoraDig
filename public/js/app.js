@@ -32,6 +32,7 @@ function createMessageCard(message, currentUser) {
     const card = document.createElement('article');
     card.className = 'message-card';
     card.setAttribute('data-message-id', message._id);
+    card.id = `message-${message._id}`;
 
     // Se gestiona el caso de que el autor del mensaje haya sido eliminado.
     const author = message.sender || { username: 'Usuario Eliminado', profilePicturePath: '../images/default-avatar.webp', _id: null };
@@ -102,6 +103,15 @@ function createMessageCard(message, currentUser) {
     const cardBody = document.createElement('div');
     cardBody.className = 'card-body';
 
+    if (message.referencedMessage && message.referencedMessage.title) {
+        const replyToInfo = document.createElement('div');
+        replyToInfo.className = 'reply-to-info';
+        replyToInfo.innerHTML = `
+            Respuesta a: <a href="#message-${message.referencedMessage._id}">${message.referencedMessage.title}</a>
+        `;
+        cardBody.appendChild(replyToInfo);
+    }
+
     const title = document.createElement('h4');
     title.className = 'message-title';
     title.textContent = message.title;
@@ -116,15 +126,13 @@ function createMessageCard(message, currentUser) {
     
     // --- Construcción del Pie de la Tarjeta ---
     const cardFooter = document.createElement('div');
-    cardFooter.className = 'card-footer'; // Nuevo contenedor para hashtags y botón de eliminar
+    cardFooter.className = 'card-footer';
 
     const hashtagsSmall = document.createElement('small');
     hashtagsSmall.className = 'message-hashtags';
     hashtagsSmall.innerHTML = formattedHashtags;
     cardFooter.appendChild(hashtagsSmall);
     
-    // Lógica de visibilidad del botón de eliminar.
-    // El botón se muestra si el usuario actual es admin, moderador, o el autor del mensaje.
     const canDelete = currentUser && (
         currentUser.role === 'admin' ||
         currentUser.role === 'moderator' ||
@@ -135,7 +143,6 @@ function createMessageCard(message, currentUser) {
         const deleteButton = document.createElement('button');
         deleteButton.className = 'delete-message-btn';
         deleteButton.title = 'Eliminar mensaje';
-        // Icono de papelera (SVG)
         deleteButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-trash-2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`;
         cardFooter.appendChild(deleteButton);
     }

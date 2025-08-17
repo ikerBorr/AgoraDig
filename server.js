@@ -829,7 +829,8 @@ app.get('/api/messages', async (req, res) => {
             .skip(skip)
             .limit(limit)
             .populate('sender', 'username profilePicturePath')
-            .lean({ virtuals: true }); // Usar .lean() con virtuals para rendimiento.
+            .populate('referencedMessage', 'title')
+            .lean({ virtuals: true });
 
         const processedMessages = messages.map(message => {
             if (message.sender) {
