@@ -35,7 +35,7 @@ function createMessageCard(message, currentUser) {
     card.id = `message-${message._id}`;
 
     // Se gestiona el caso de que el autor del mensaje haya sido eliminado.
-    const author = message.sender || { username: 'Usuario Eliminado', profilePicturePath: '../images/default-avatar.webp', _id: null };
+    const author = message.sender || { username: 'Usuario Eliminado', profilePicturePath: '/images/default-avatar.webp', _id: null };
     const { _id: authorId, username: authorUsername, profilePicturePath: authorAvatar } = author;
 
     // Se preparan los contadores y clases CSS.
@@ -103,12 +103,15 @@ function createMessageCard(message, currentUser) {
     const cardBody = document.createElement('div');
     cardBody.className = 'card-body';
 
-    if (message.referencedMessage && message.referencedMessage.title) {
+    if (message.referencedMessage) {
         const replyToInfo = document.createElement('div');
         replyToInfo.className = 'reply-to-info';
-        replyToInfo.innerHTML = `
-            Respuesta a: <a href="#message-${message.referencedMessage._id}">${message.referencedMessage.title}</a>
-        `;
+        
+        if (message.referencedMessage.messageStatus === 'active' && message.referencedMessage.title) {
+            replyToInfo.innerHTML = `Respuesta a: <a href="/messages/${message.referencedMessage._id}">${message.referencedMessage.title}</a>`;
+        } else {
+            replyToInfo.innerHTML = `Respuesta a: <span class="deleted-message-reference">Mensaje_Eliminado</span>`;
+        }
         cardBody.appendChild(replyToInfo);
     }
 
@@ -266,14 +269,14 @@ async function loadAndExecuteScript(templatePath) {
     }
     
     const scriptMap = {
-        './templates/register.html': './js/register.js',
-        './templates/login.html': './js/login.js',
-        './templates/profile.html': './js/profile.js',
+        '/templates/register.html': './js/register.js',
+        '/templates/login.html': './js/login.js',
+        '/templates/profile.html': './js/profile.js',
     };
     const initFunctionMap = {
-        './templates/register.html': () => { if (typeof initRegisterForm === 'function') initRegisterForm(); },
-        './templates/login.html': () => { if (typeof initLoginForm === 'function') initLoginForm(); },
-        './templates/profile.html': () => { if (typeof initProfilePage === 'function') initProfilePage(); },
+        '/templates/register.html': () => { if (typeof initRegisterForm === 'function') initRegisterForm(); },
+        '/templates/login.html': () => { if (typeof initLoginForm === 'function') initLoginForm(); },
+        '/templates/profile.html': () => { if (typeof initProfilePage === 'function') initProfilePage(); },
     };
 
     const scriptSrc = scriptMap[templatePath];
@@ -296,7 +299,7 @@ async function loadAndExecuteScript(templatePath) {
  * @description Realiza una petición `fetch` para obtener el contenido de un archivo de plantilla HTML.
  * Si la plantilla no se encuentra (error 404), carga una plantilla de error `error-404.html` por defecto
  * para informar al usuario de manera controlada sin romper la aplicación.
- * @param {string} path - La ruta al archivo de plantilla (ej. './templates/home.html').
+ * @param {string} path - La ruta al archivo de plantilla (ej. '/templates/home.html').
  * @returns {Promise<string>} Una promesa que se resuelve con el contenido de la plantilla como una cadena de texto.
  */
 async function fetchTemplate(path) {
@@ -376,7 +379,7 @@ async function renderPage(path) {
     let templatePath = '';
     
     if (pathname === '/' || pathname === '/home') {
-        appRoot.innerHTML = await fetchTemplate('./templates/home.html');
+        appRoot.innerHTML = await fetchTemplate('/templates/home.html');
         document.title = 'Inicio';
         
         const messagesContainer = document.getElementById('messages-container');
@@ -565,25 +568,145 @@ async function renderPage(path) {
                 const card = deleteButton.closest('.message-card');
                 const messageId = card.getAttribute('data-message-id');
                 showDeleteConfirmationModal(messageId, card);
+                return;
+            }
+            
+            const card = event.target.closest('.message-card');
+            if (!card) return;
+
+            const isInteractiveClick = event.target.closest('a, button, .like-button, .reply-message-btn, .delete-message-btn');
+            if (!isInteractiveClick) {
+                const messageId = card.getAttribute('data-message-id');
+                const detailUrl = `/messages/${messageId}`;
+                window.history.pushState({}, '', detailUrl);
+                await renderPage(detailUrl);
             }
         });
 
         templatePath = '';
 
+    } else if (pathname.startsWith('/messages/')) {
+        try {
+            const messageId = pathname.split('/')[2];
+            if (!messageId) throw new Error('ID de mensaje no válido.');
+
+            let currentUser = null;
+            try {
+                const profileResponse = await fetch('/api/profile');
+                if (profileResponse.ok) currentUser = await profileResponse.json();
+            } catch (error) { /* Usuario no logueado, se ignora */ }
+    
+            const response = await fetch(`/api/messages/${messageId}`);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Mensaje no encontrado o ha sido eliminado.');
+            }
+            const messageData = await response.json();
+    
+            appRoot.innerHTML = await fetchTemplate('/templates/message-detail.html');
+            document.title = messageData.title;
+    
+            const mainMessageContainer = document.getElementById('main-message-container');
+            const repliesContainer = document.getElementById('replies-container');
+            const repliesHeader = document.getElementById('replies-header');
+    
+            const mainCard = createMessageCard(messageData, currentUser);
+            mainMessageContainer.appendChild(mainCard);
+    
+            if (messageData.replies && messageData.replies.length > 0) {
+                repliesHeader.classList.remove('hidden');
+                messageData.replies.forEach(reply => {
+                    const replyCard = createMessageCard(reply, currentUser);
+                    const replyWrapper = document.createElement('div');
+                    replyWrapper.style.width = '90%';
+                    replyWrapper.style.marginLeft = 'auto';
+                    replyWrapper.appendChild(replyCard);
+                    repliesContainer.appendChild(replyWrapper);
+                });
+            }
+
+            const detailViewContainer = document.getElementById('message-detail-view');
+            if (detailViewContainer) {
+                async function checkAuthForDetailView() {
+                     try {
+                         const response = await fetch('/api/profile');
+                         if (response.ok) return true;
+                         if (response.status === 401) {
+                             if (confirm('Debes iniciar sesión para realizar esta acción. ¿Quieres ir a la página de login?')) {
+                                 window.history.pushState({}, '', '/login');
+                                 await renderPage('/login');
+                             }
+                             return false;
+                         }
+                         throw new Error('Error al verificar sesión.');
+                     } catch (error) {
+                         alert('Error de red. Por favor, comprueba tu conexión.');
+                         return false;
+                     }
+                 }
+
+                detailViewContainer.addEventListener('click', async (event) => {
+                     const likeButton = event.target.closest('.like-button');
+                     const replyButton = event.target.closest('.reply-message-btn');
+                     const deleteButton = event.target.closest('.delete-message-btn');
+            
+                     if (likeButton) {
+                         const isAuthenticated = await checkAuthForDetailView();
+                         if (isAuthenticated) {
+                             const card = likeButton.closest('.message-card');
+                             const msgId = card.getAttribute('data-message-id');
+                             try {
+                                 const response = await fetch(`/api/messages/${msgId}/like`, { method: 'POST' });
+                                 if (!response.ok) throw new Error('Error del servidor al procesar el like.');
+                                 
+                                 const data = await response.json();
+                                 const likeCountSpan = card.querySelector('.like-count');
+                                 if (likeCountSpan) likeCountSpan.textContent = data.likeCount;
+                                 likeButton.classList.toggle('liked', data.isLiked);
+                             } catch (error) {
+                                 console.error(error.message);
+                             }
+                         }
+                         return;
+                     }
+
+                     if (deleteButton) {
+                         const card = deleteButton.closest('.message-card');
+                         const msgId = card.getAttribute('data-message-id');
+                         showDeleteConfirmationModal(msgId, card);
+                         return;
+                     }
+
+                     if (replyButton) {
+                        alert("Para responder a un mensaje, por favor utiliza el botón principal en la página de inicio.");
+                        return;
+                     }
+                });
+            }
+
+        } catch (error) {
+            console.error('Error al renderizar el detalle del mensaje:', error);
+            appRoot.innerHTML = await fetchTemplate('/templates/error-404.html');
+            const errorElement = document.getElementById('error-message-content');
+            if(errorElement) errorElement.textContent = error.message;
+            document.title = 'ERROR 404';
+        }
+        templatePath = '';
+
     } else if (pathname === '/about' || pathname === '/about-AgoraDig' || pathname === '/about-us') {
-        templatePath = './templates/about.html';
+        templatePath = '/templates/about.html';
         document.title = 'Acerca de';
     } else if (pathname === '/contact' || pathname === '/contact-us') {
-        templatePath = './templates/contact.html';
+        templatePath = '/templates/contact.html';
         document.title = 'Contacto';
     } else if (pathname === '/register') {
-        templatePath = './templates/register.html';
+        templatePath = '/templates/register.html';
         document.title = 'Crear Cuenta';
     } else if (pathname === '/register-success') {
-        templatePath = './templates/register-success.html';
+        templatePath = '/templates/register-success.html';
         document.title = 'Registro Exitoso';
     } else if (pathname === '/login') {
-        templatePath = './templates/login.html';
+        templatePath = '/templates/login.html';
         document.title = 'Iniciar Sesión';
     
     } else if (path.startsWith('/view-profile')) {
@@ -610,7 +733,7 @@ async function renderPage(path) {
             if (!userResponse.ok) {
                 const errorData = await userResponse.json();
                 if (userResponse.status === 410) {
-                    appRoot.innerHTML = await fetchTemplate('../templates/error-410.html');
+                    appRoot.innerHTML = await fetchTemplate('/templates/error-410.html');
                     document.title = 'ERROR 410';
                     templatePath = '';
                     loaderContainer.classList.add('hidden');
@@ -621,7 +744,7 @@ async function renderPage(path) {
             }
             
             const userData = await userResponse.json();
-            let profileHtml = await fetchTemplate('./templates/view-profile.html');
+            let profileHtml = await fetchTemplate('/templates/view-profile.html');
             const joinDate = new Date(userData.createdAt).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
             
             profileHtml = profileHtml.replace(/{{createdAt}}/g, joinDate);
@@ -734,7 +857,7 @@ async function renderPage(path) {
 
         } catch (error) {
             console.error('Error al renderizar el perfil de usuario:', error);
-            appRoot.innerHTML = await fetchTemplate('./templates/error-404.html');
+            appRoot.innerHTML = await fetchTemplate('/templates/error-404.html');
             document.title = 'ERROR 404';
         }
     
@@ -751,7 +874,7 @@ async function renderPage(path) {
             }
     
             const userData = await response.json();
-            let profileHtml = await fetchTemplate('./templates/profile.html');
+            let profileHtml = await fetchTemplate('/templates/profile.html');
             const joinDate = new Date(userData.createdAt).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
             
             profileHtml = profileHtml.replace('{{createdAt}}', joinDate);
@@ -779,23 +902,23 @@ async function renderPage(path) {
 
             document.title = userData.username;
             templatePath = '';
-            await loadAndExecuteScript('./templates/profile.html');
+            await loadAndExecuteScript('/templates/profile.html');
     
         } catch (error) {
             console.error(error);
-            appRoot.innerHTML = await fetchTemplate('./templates/error-404.html');
+            appRoot.innerHTML = await fetchTemplate('/templates/error-404.html');
             document.title = 'ERROR 404';
         }
 
     } else if (pathname === '/terms-and-conditions') {
-        templatePath = './templates/terms-and-conditions.html';
+        templatePath = '/templates/terms-and-conditions.html';
         document.title = 'Términos y Condiciones';
     } else if (pathname === '/privacy-policy') {
-        templatePath = './templates/privacy-policy.html';
+        templatePath = '/templates/privacy-policy.html';
         document.title = 'Política de Privacidad';
 
     } else {
-        templatePath = './templates/error-404.html';
+        templatePath = '/templates/error-404.html';
         document.title = 'ERROR 404';
     }
 

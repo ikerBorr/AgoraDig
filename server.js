@@ -34,7 +34,7 @@ const helmet = require('helmet');
  * @constant {string} DEFAULT_AVATAR_PATH - Ruta a la imagen de perfil por defecto.
  * @description Se usa como fallback cuando un usuario no tiene imagen o la ruta está rota.
  */
-const DEFAULT_AVATAR_PATH = 'images/default-avatar.webp';
+const DEFAULT_AVATAR_PATH = '/images/default-avatar.webp';
 
 /**
  * @function getValidProfilePicturePath
@@ -44,26 +44,18 @@ const DEFAULT_AVATAR_PATH = 'images/default-avatar.webp';
  * @returns {string} Una ruta de imagen válida y segura para ser servida al cliente.
  */
 function getValidProfilePicturePath(picturePath) {
-    // Si la ruta es nula o indefinida, retorna inmediatamente el avatar por defecto.
     if (!picturePath) {
         return DEFAULT_AVATAR_PATH;
     }
+    
+    // Asegura que la ruta de la DB (ej: 'uploads/file.webp') se sirva como ruta absoluta.
+    const absolutePath = picturePath.startsWith('/') ? picturePath : `/${picturePath}`;
+    const physicalPath = path.join(__dirname, picturePath.startsWith('/') ? picturePath.substring(1) : picturePath);
 
-    let finalCheckPath;
-
-    // Construye la ruta absoluta para la verificación, considerando si es una subida o un asset público.
-    if (picturePath.startsWith('uploads/')) {
-        finalCheckPath = path.join(__dirname, picturePath);
-    } else {
-        finalCheckPath = path.join(__dirname, 'public', picturePath);
+    if (fs.existsSync(physicalPath)) {
+        return absolutePath;
     }
     
-    // Devuelve la ruta original solo si el archivo existe físicamente.
-    if (fs.existsSync(finalCheckPath)) {
-        return picturePath;
-    }
-    
-    // Si no, devuelve la ruta del avatar por defecto.
     return DEFAULT_AVATAR_PATH;
 }
 
@@ -786,7 +778,7 @@ app.delete('/api/profile', isAuthenticated, async (req, res) => {
                 username: anonymizedUsername,
                 email: anonymizedEmail,
                 description: '',
-                profilePicturePath: DEFAULT_AVATAR_PATH, // Asigna el avatar por defecto.
+                profilePicturePath: 'images/default-avatar.webp', // Asigna el avatar por defecto (sin / al inicio para la DB)
                 password: undefined, // Elimina la contraseña.
                 recoveryPIN: undefined // Elimina el PIN.
             }
@@ -829,7 +821,7 @@ app.get('/api/messages', async (req, res) => {
             .skip(skip)
             .limit(limit)
             .populate('sender', 'username profilePicturePath')
-            .populate('referencedMessage', 'title')
+            .populate('referencedMessage', 'title _id messageStatus')
             .lean({ virtuals: true });
 
         const processedMessages = messages.map(message => {
@@ -1144,6 +1136,76 @@ app.get('/api/messages/counts', async (req, res) => {
     } catch (error) {
         console.error('Error en GET /api/messages/counts:', error);
         res.status(500).json({ message: 'Error en el servidor al obtener los contadores.' });
+    }
+});
+
+/**
+ * @route   GET /api/messages/:id
+ * @description Obtiene un mensaje específico por su ID y popula sus respuestas. Utiliza un enfoque robusto de dos pasos.
+ * @access  Public
+ * @param {object} req.params - Parámetros de la ruta.
+ * @param {string} req.params.id - El ID del mensaje a obtener.
+ * @returns {object} 200 - Objeto con los datos del mensaje principal y un array de sus respuestas.
+ * @returns {object} 404 - Mensaje no encontrado o no está activo.
+ * @returns {object} 500 - Error del servidor.
+ */
+app.get('/api/messages/:id', async (req, res) => {
+    try {
+        const { id: messageId } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(messageId)) {
+            return res.status(404).json({ message: 'El formato del ID del mensaje no es válido.' });
+        }
+
+        // PASO 1: Obtener el mensaje principal y poblar sus referencias directas.
+        const message = await Message.findOne({ _id: messageId, messageStatus: 'active' })
+            .populate('sender', 'username profilePicturePath')
+            .populate('referencedMessage', 'title _id messageStatus')
+            .lean({ virtuals: true });
+
+        if (!message) {
+            return res.status(404).json({ message: 'Mensaje no encontrado o ha sido eliminado.' });
+        }
+
+        // PASO 2: Si el mensaje principal existe, obtener y poblar sus respuestas por separado.
+        if (message.replies && message.replies.length > 0) {
+            const replies = await Message.find({
+                '_id': { $in: message.replies },
+                'messageStatus': 'active'
+            })
+            .populate('sender', 'username profilePicturePath')
+            .populate('referencedMessage', 'title _id messageStatus')
+            .sort({ createdAt: 'asc' })
+            .lean({ virtuals: true });
+            
+            message.replies = replies; // Reemplaza el array de IDs con los documentos poblados.
+        }
+        
+        // PASO 3: Procesar los datos para asegurar rutas de imagen válidas y estado de 'like'.
+        if (message.sender) {
+            message.sender.profilePicturePath = getValidProfilePicturePath(message.sender.profilePicturePath);
+        } else {
+            message.sender = { username: 'Usuario Eliminado', profilePicturePath: DEFAULT_AVATAR_PATH };
+        }
+        message.isLiked = req.session.userId ? message.likes.some(like => like.toString() === req.session.userId.toString()) : false;
+
+        if (message.replies) {
+            message.replies = message.replies.map(reply => {
+                if (reply.sender) {
+                    reply.sender.profilePicturePath = getValidProfilePicturePath(reply.sender.profilePicturePath);
+                } else {
+                    reply.sender = { username: 'Usuario Eliminado', profilePicturePath: DEFAULT_AVATAR_PATH };
+                }
+                reply.isLiked = req.session.userId ? reply.likes.some(like => like.toString() === req.session.userId.toString()) : false;
+                return reply;
+            });
+        }
+        
+        res.status(200).json(message);
+
+    } catch (error) {
+        console.error(`Error en GET /api/messages/${req.params.id}:`, error);
+        res.status(500).json({ message: 'Error en el servidor al obtener el mensaje.' });
     }
 });
 
