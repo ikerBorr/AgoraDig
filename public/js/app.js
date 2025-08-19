@@ -249,6 +249,111 @@ function showDeleteConfirmationModal(messageId, cardElement) {
     });
 }
 
+/**
+ * @function showReplyModal
+ * @description Crea y muestra dinámicamente un modal para responder a un mensaje.
+ * Esta función es autocontenida y no depende de HTML preexistente en la plantilla.
+ * @param {string} parentId - El ID del mensaje al que se está respondiendo.
+ */
+function showReplyModal(parentId) {
+    if (document.getElementById('dynamic-reply-modal-overlay')) return;
+
+    const modalOverlay = document.createElement('div');
+    modalOverlay.className = 'modal-overlay';
+    modalOverlay.id = 'dynamic-reply-modal-overlay';
+
+    const modalContent = document.createElement('div');
+    modalContent.className = 'modal-content';
+    modalContent.innerHTML = `
+        <div class="modal-header">
+            <h2 id="modal-title">Responder al Mensaje</h2>
+            <button id="close-modal-btn" class="close-button" title="Cerrar">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="dynamic-reply-form" novalidate>
+                <div class="form-group">
+                    <label for="message-title">Título</label>
+                    <input type="text" id="message-title" name="title" required minlength="3" maxlength="100">
+                </div>
+                <div class="form-group">
+                    <label for="message-content">Contenido</label>
+                    <textarea id="message-content" name="content" rows="6" required minlength="10" maxlength="1500"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="message-hashtags">Hashtags</label>
+                    <input type="text" id="message-hashtags" name="hashtags" placeholder="Ej: #tecnologia #debate">
+                    <small>Escribe hashtags separados por espacios.</small>
+                </div>
+                <div id="modal-error-message" class="error-text hidden"></div>
+                <button type="submit" class="button-primary">Publicar</button>
+            </form>
+        </div>
+    `;
+
+    modalOverlay.appendChild(modalContent);
+    document.body.appendChild(modalOverlay);
+
+    requestAnimationFrame(() => {
+        modalOverlay.classList.add('visible');
+    });
+
+    const closeModal = () => {
+        modalOverlay.classList.remove('visible');
+        setTimeout(() => modalOverlay.remove(), 300);
+    };
+
+    modalContent.querySelector('#close-modal-btn').addEventListener('click', closeModal);
+    modalOverlay.addEventListener('click', (e) => {
+        if (e.target === modalOverlay) {
+            closeModal();
+        }
+    });
+
+    const form = modalContent.querySelector('#dynamic-reply-form');
+    const errorEl = modalContent.querySelector('#modal-error-message');
+    
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        errorEl.classList.add('hidden');
+
+        const titleInput = form.querySelector('#message-title');
+        const contentInput = form.querySelector('#message-content');
+
+        // Validación de cliente
+        if (titleInput.value.trim().length < 3 || titleInput.value.trim().length > 100) {
+            errorEl.textContent = 'El título debe tener entre 3 y 100 caracteres.';
+            errorEl.classList.remove('hidden');
+            return;
+        }
+        if (contentInput.value.trim().length < 10 || contentInput.value.trim().length > 1500) {
+            errorEl.textContent = 'El contenido debe tener entre 10 y 1500 caracteres.';
+            errorEl.classList.remove('hidden');
+            return;
+        }
+
+        const formData = new FormData(e.target);
+        const data = Object.fromEntries(formData.entries());
+        const url = `/api/messages/${parentId}/reply`;
+
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const responseData = await response.json();
+            if (!response.ok) {
+                throw new Error(responseData.message || 'Error desconocido al publicar la respuesta.');
+            }
+            closeModal();
+            await renderPage(window.location.pathname);
+        } catch (error) {
+            errorEl.textContent = error.message;
+            errorEl.classList.remove('hidden');
+        }
+    });
+}
+
 
 // ===================================
 //  LÓGICA DE CARGA DE VISTAS
@@ -377,6 +482,28 @@ async function renderPage(path) {
     }
 
     let templatePath = '';
+
+    // Función de ayuda para verificar la autenticación, ahora en un ámbito superior para ser reutilizable.
+    async function checkAuth() {
+        try {
+            const response = await fetch('/api/profile');
+            if (response.ok) return true;
+
+            if (response.status === 401) {
+                if (confirm('Debes iniciar sesión para realizar esta acción. ¿Quieres ir a la página de login?')) {
+                    window.history.pushState({}, '', '/login');
+                    await renderPage('/login');
+                }
+                return false;
+            }
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'No se pudo verificar el estado de la sesión.');
+        } catch (error) {
+            console.error('Error al verificar la autenticación:', error);
+            alert(error.message || 'Error de red. Por favor, comprueba tu conexión.');
+            return false;
+        }
+    }
     
     if (pathname === '/' || pathname === '/home') {
         appRoot.innerHTML = await fetchTemplate('/templates/home.html');
@@ -464,27 +591,6 @@ async function renderPage(path) {
             messageForm.removeAttribute('data-parent-id');
             if(modalTitle) modalTitle.textContent = 'Crear un Nuevo Mensaje';
         };
-
-        async function checkAuth() {
-            try {
-                const response = await fetch('/api/profile');
-                if (response.ok) return true;
-
-                if (response.status === 401) {
-                    if (confirm('Debes iniciar sesión para realizar esta acción. ¿Quieres ir a la página de login?')) {
-                        window.history.pushState({}, '', '/login');
-                        await renderPage('/login');
-                    }
-                    return false;
-                }
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'No se pudo verificar el estado de la sesión.');
-            } catch (error) {
-                console.error('Error al verificar la autenticación:', error);
-                alert(error.message || 'Error de red. Por favor, comprueba tu conexión.');
-                return false;
-            }
-        }
         
         const checkAuthAndShowModal = async () => {
             const isAuthenticated = await checkAuth();
@@ -622,36 +728,21 @@ async function renderPage(path) {
                     replyWrapper.style.marginLeft = 'auto';
                     replyWrapper.appendChild(replyCard);
                     repliesContainer.appendChild(replyWrapper);
+                    
+                    const lineBreak = document.createElement('br');
+                    repliesContainer.appendChild(lineBreak);
                 });
             }
 
             const detailViewContainer = document.getElementById('message-detail-view');
             if (detailViewContainer) {
-                async function checkAuthForDetailView() {
-                     try {
-                         const response = await fetch('/api/profile');
-                         if (response.ok) return true;
-                         if (response.status === 401) {
-                             if (confirm('Debes iniciar sesión para realizar esta acción. ¿Quieres ir a la página de login?')) {
-                                 window.history.pushState({}, '', '/login');
-                                 await renderPage('/login');
-                             }
-                             return false;
-                         }
-                         throw new Error('Error al verificar sesión.');
-                     } catch (error) {
-                         alert('Error de red. Por favor, comprueba tu conexión.');
-                         return false;
-                     }
-                 }
-
                 detailViewContainer.addEventListener('click', async (event) => {
                      const likeButton = event.target.closest('.like-button');
                      const replyButton = event.target.closest('.reply-message-btn');
                      const deleteButton = event.target.closest('.delete-message-btn');
             
                      if (likeButton) {
-                         const isAuthenticated = await checkAuthForDetailView();
+                         const isAuthenticated = await checkAuth();
                          if (isAuthenticated) {
                              const card = likeButton.closest('.message-card');
                              const msgId = card.getAttribute('data-message-id');
@@ -678,9 +769,29 @@ async function renderPage(path) {
                      }
 
                      if (replyButton) {
-                        alert("Para responder a un mensaje, por favor utiliza el botón principal en la página de inicio.");
+                        const isAuthenticated = await checkAuth();
+                        if (isAuthenticated) {
+                            const card = replyButton.closest('.message-card');
+                            const parentId = card.getAttribute('data-message-id');
+                            showReplyModal(parentId);
+                        }
                         return;
                      }
+                     
+                    const card = event.target.closest('.message-card');
+                    if (!card) return;
+
+                    const isInteractiveClick = event.target.closest('a, button, .like-button, .reply-message-btn, .delete-message-btn');
+                    if (!isInteractiveClick) {
+                        const messageIdToNav = card.getAttribute('data-message-id');
+                        const currentMessageId = pathname.split('/')[2];
+                        
+                        if (messageIdToNav !== currentMessageId) {
+                            const detailUrl = `/messages/${messageIdToNav}`;
+                            window.history.pushState({}, '', detailUrl);
+                            await renderPage(detailUrl);
+                        }
+                    }
                 });
             }
 

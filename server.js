@@ -129,22 +129,39 @@ const isModeratorOrAdmin = async (req, res, next) => {
     }
 };
 
+// --- CONFIGURACIÓN DE LIMITADORES DE PETICIONES (RATE LIMITING) ---
+
 /**
- * @constant DoSLimiter
- * @description Limitador de peticiones global para mitigar ataques de denegación de servicio (DoS).
- * Limita a 200 peticiones por IP cada 15 minutos.
+ * @constant apiLimiter
+ * @description Limitador para peticiones de lectura a la API (GET).
+ * Es más permisivo para permitir una navegación fluida y la carga de datos.
+ * Limita a 300 peticiones por IP cada 5 minutos.
  */
-const DoSLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 200,
-    message: 'Demasiadas peticiones enviadas, se ha detectado un posible ataque. Por favor, espera unos minutos.',
+const apiLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000, // 5 minutos
+    max: 300,
+    message: 'Demasiadas peticiones de datos enviadas. Por favor, espera unos minutos.',
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
+/**
+ * @constant actionLimiter
+ * @description Limitador para peticiones de acción (POST, PATCH, DELETE) que modifican datos.
+ * Permite un uso activo pero previene abusos por scripts.
+ * Limita a 100 peticiones por IP cada 5 minutos.
+ */
+const actionLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000, // 5 minutos
+    max: 100,
+    message: 'Has realizado demasiadas acciones seguidas. Por favor, espera unos minutos.',
     standardHeaders: true,
     legacyHeaders: false
 });
 
 /**
  * @constant sensitiveRouteLimiter
- * @description Limitador de peticiones más estricto para rutas sensibles (login, registro).
+ * @description Limitador de peticiones muy estricto para rutas sensibles (login, registro).
  * Limita a 10 peticiones por IP cada 5 minutos para prevenir ataques de fuerza bruta.
  */
 const sensitiveRouteLimiter = rateLimit({
@@ -155,8 +172,6 @@ const sensitiveRouteLimiter = rateLimit({
     message: 'Demasiadas peticiones a esta ruta, por favor intente de nuevo más tarde.'
 });
 
-// Aplica el limitador global a todas las peticiones.
-app.use(DoSLimiter);
 
 /**
  * @function isAuthenticated
@@ -278,7 +293,7 @@ const Message = mongoose.model('Message', messageSchema);
 // =================================================================
 
 const MAX_LOGIN_ATTEMPTS = 5;
-const LOCKOUT_TIME = 24 * 60 * 60 * 1000; // 24 horas de bloqueo en milisegundos.
+const LOCKOUT_TIME = 24 * 60 * 60 * 1000; // 24 horas de bloqueo.
 
 /**
  * @route   POST /login
@@ -540,7 +555,7 @@ app.post('/register',
  * @returns {object} 200 - Mensaje de éxito.
  * @returns {object} 500 - Error al destruir la sesión.
  */
-app.post('/logout', (req, res) => {
+app.post('/logout', actionLimiter, (req, res) => {
     req.session.destroy(err => {
         if (err) {
             console.error('Error en /logout:', err);
@@ -565,7 +580,7 @@ app.post('/logout', (req, res) => {
  * @returns {object} 404 - Usuario no encontrado en la BD (sesión podría ser inválida).
  * @returns {object} 500 - Error del servidor.
  */
-app.get('/api/profile', isAuthenticated, async (req, res) => {
+app.get('/api/profile', apiLimiter, isAuthenticated, async (req, res) => {
     try {
         const user = await User.findById(req.session.userId)
             .select('firstName lastName username email description profilePicturePath role userStatus createdAt');
@@ -600,6 +615,7 @@ app.get('/api/profile', isAuthenticated, async (req, res) => {
  * @returns {object} 500 - Error del servidor.
  */
 app.patch('/api/profile',
+    actionLimiter,
     isAuthenticated,
     // Middleware de Multer para manejar la subida del archivo. Se coloca antes del controlador.
     (req, res, next) => {
@@ -729,7 +745,7 @@ app.patch('/api/profile',
  * @returns {object} 404 - Usuario no encontrado.
  * @returns {object} 500 - Error del servidor.
  */
-app.delete('/api/profile', isAuthenticated, async (req, res) => {
+app.delete('/api/profile', actionLimiter, isAuthenticated, async (req, res) => {
     const userId = req.session.userId;
     const { recoveryPIN } = req.body; // Se espera el PIN en el cuerpo de la petición.
 
@@ -810,7 +826,7 @@ app.delete('/api/profile', isAuthenticated, async (req, res) => {
  * @returns {object} 200 - Objeto con un array de `messages` e información de paginación (`totalPages`, `currentPage`).
  * @returns {object} 500 - Error del servidor.
  */
-app.get('/api/messages', async (req, res) => {
+app.get('/api/messages', apiLimiter, async (req, res) => {
     try {
         const page = parseInt(req.query.page, 10) || 1;
         const limit = parseInt(req.query.limit, 10) || 10;
@@ -865,7 +881,7 @@ app.get('/api/messages', async (req, res) => {
  * @returns {object} 403 - El usuario tiene el estado 'banned' y no puede publicar.
  * @returns {object} 500 - Error del servidor.
  */
-app.post('/api/messages', isAuthenticated, async (req, res) => {
+app.post('/api/messages', actionLimiter, isAuthenticated, async (req, res) => {
     try {
         const { title, content, hashtags } = req.body;
 
@@ -930,7 +946,7 @@ app.post('/api/messages', isAuthenticated, async (req, res) => {
  * @returns {object} 404 - Mensaje original o usuario no encontrado.
  * @returns {object} 500 - Error del servidor.
  */
-app.post('/api/messages/:id/reply', isAuthenticated, async (req, res) => {
+app.post('/api/messages/:id/reply', actionLimiter, isAuthenticated, async (req, res) => {
     const parentMessageId = req.params.id;
 
     try {
@@ -998,7 +1014,7 @@ app.post('/api/messages/:id/reply', isAuthenticated, async (req, res) => {
  * @returns {object} 404 - Mensaje o usuario no encontrado.
  * @returns {object} 500 - Error del servidor.
  */
-app.delete('/api/messages/:id', isAuthenticated, async (req, res) => {
+app.delete('/api/messages/:id', actionLimiter, isAuthenticated, async (req, res) => {
     try {
         const messageId = req.params.id;
         const userId = req.session.userId;
@@ -1059,7 +1075,7 @@ app.delete('/api/messages/:id', isAuthenticated, async (req, res) => {
  * @returns {object} 404 - Mensaje no encontrado.
  * @returns {object} 500 - Error del servidor.
  */
-app.post('/api/messages/:id/like', isAuthenticated, async (req, res) => {
+app.post('/api/messages/:id/like', actionLimiter, isAuthenticated, async (req, res) => {
     try {
         const messageId = req.params.id;
         const userId = req.session.userId;
@@ -1112,7 +1128,7 @@ app.post('/api/messages/:id/like', isAuthenticated, async (req, res) => {
  * @returns {object} 400 - Si no se proporcionan IDs.
  * @returns {object} 500 - Error del servidor.
  */
-app.get('/api/messages/counts', async (req, res) => {
+app.get('/api/messages/counts', apiLimiter, async (req, res) => {
     try {
         const { ids } = req.query;
         if (!ids) {
@@ -1149,7 +1165,7 @@ app.get('/api/messages/counts', async (req, res) => {
  * @returns {object} 404 - Mensaje no encontrado o no está activo.
  * @returns {object} 500 - Error del servidor.
  */
-app.get('/api/messages/:id', async (req, res) => {
+app.get('/api/messages/:id', apiLimiter, async (req, res) => {
     try {
         const { id: messageId } = req.params;
 
@@ -1223,7 +1239,7 @@ app.get('/api/messages/:id', async (req, res) => {
  * @returns {object} 410 - El usuario ha sido eliminado (Gone).
  * @returns {object} 500 - Error del servidor.
  */
-app.get('/api/users/username/:username', async (req, res) => {
+app.get('/api/users/username/:username', apiLimiter, async (req, res) => {
     try {
         const { username } = req.params;
         let fieldsToSelect = 'firstName lastName username description profilePicturePath createdAt role userStatus';
@@ -1276,7 +1292,7 @@ app.get('/api/users/username/:username', async (req, res) => {
  * @returns {object} 4xx - Errores de permisos, validación o usuario no encontrado.
  * @returns {object} 500 - Error del servidor.
  */
-app.patch('/api/users/:username/admin-update', isAuthenticated, isModeratorOrAdmin, async (req, res) => {
+app.patch('/api/users/:username/admin-update', actionLimiter, isAuthenticated, isModeratorOrAdmin, async (req, res) => {
     try {
         const { username } = req.params;
         const { role, strikes, userStatus } = req.body;
