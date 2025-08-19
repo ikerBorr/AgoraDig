@@ -1157,11 +1157,11 @@ app.get('/api/messages/counts', apiLimiter, async (req, res) => {
 
 /**
  * @route   GET /api/messages/:id
- * @description Obtiene un mensaje específico por su ID y popula sus respuestas. Utiliza un enfoque robusto de dos pasos.
+ * @description Obtiene un mensaje específico por su ID. No popula las respuestas.
  * @access  Public
  * @param {object} req.params - Parámetros de la ruta.
  * @param {string} req.params.id - El ID del mensaje a obtener.
- * @returns {object} 200 - Objeto con los datos del mensaje principal y un array de sus respuestas.
+ * @returns {object} 200 - Objeto con los datos del mensaje principal.
  * @returns {object} 404 - Mensaje no encontrado o no está activo.
  * @returns {object} 500 - Error del servidor.
  */
@@ -1172,8 +1172,7 @@ app.get('/api/messages/:id', apiLimiter, async (req, res) => {
         if (!mongoose.Types.ObjectId.isValid(messageId)) {
             return res.status(404).json({ message: 'El formato del ID del mensaje no es válido.' });
         }
-
-        // PASO 1: Obtener el mensaje principal y poblar sus referencias directas.
+        
         const message = await Message.findOne({ _id: messageId, messageStatus: 'active' })
             .populate('sender', 'username profilePicturePath')
             .populate('referencedMessage', 'title _id messageStatus')
@@ -1183,10 +1182,55 @@ app.get('/api/messages/:id', apiLimiter, async (req, res) => {
             return res.status(404).json({ message: 'Mensaje no encontrado o ha sido eliminado.' });
         }
 
-        // PASO 2: Si el mensaje principal existe, obtener y poblar sus respuestas por separado.
-        if (message.replies && message.replies.length > 0) {
+        if (message.sender) {
+            message.sender.profilePicturePath = getValidProfilePicturePath(message.sender.profilePicturePath);
+        } else {
+            message.sender = { username: 'Usuario Eliminado', profilePicturePath: DEFAULT_AVATAR_PATH };
+        }
+        message.isLiked = req.session.userId ? message.likes.some(like => like.toString() === req.session.userId.toString()) : false;
+        
+        res.status(200).json(message);
+
+    } catch (error) {
+        console.error(`Error en GET /api/messages/${req.params.id}:`, error);
+        res.status(500).json({ message: 'Error en el servidor al obtener el mensaje.' });
+    }
+});
+
+/**
+ * @route   GET /api/messages/:id/replies
+ * @description Obtiene una lista paginada de las respuestas de un mensaje específico.
+ * @access  Public
+ * @param {object} req.params - Parámetros de la ruta.
+ * @param {string} req.params.id - El ID del mensaje padre.
+ * @param {object} req.query - Parámetros de consulta para la paginación.
+ * @param {number} [req.query.page=1] - El número de página de respuestas a obtener.
+ * @param {number} [req.query.limit=10] - El número de respuestas por página.
+ * @returns {object} 200 - Objeto de paginación con un array de respuestas (`docs`).
+ * @returns {object} 404 - Mensaje padre no encontrado.
+ * @returns {object} 500 - Error del servidor.
+ */
+app.get('/api/messages/:id/replies', apiLimiter, async (req, res) => {
+    try {
+        const { id: parentMessageId } = req.params;
+        const page = parseInt(req.query.page, 10) || 1;
+        const limit = parseInt(req.query.limit, 10) || 10;
+        const skip = (page - 1) * limit;
+
+        const parentMessage = await Message.findOne({ _id: parentMessageId, messageStatus: 'active' }).select('replies');
+        if (!parentMessage) {
+            return res.status(404).json({ message: 'El mensaje principal no fue encontrado.' });
+        }
+
+        const totalReplies = parentMessage.replies.length;
+        const totalPages = Math.ceil(totalReplies / limit);
+        let docs = [];
+
+        if (totalReplies > 0 && page <= totalPages) {
+            const replyIdsOnPage = parentMessage.replies.slice(skip, skip + limit);
+            
             const replies = await Message.find({
-                '_id': { $in: message.replies },
+                '_id': { $in: replyIdsOnPage },
                 'messageStatus': 'active'
             })
             .populate('sender', 'username profilePicturePath')
@@ -1194,19 +1238,7 @@ app.get('/api/messages/:id', apiLimiter, async (req, res) => {
             .sort({ createdAt: 'asc' })
             .lean({ virtuals: true });
             
-            message.replies = replies; // Reemplaza el array de IDs con los documentos poblados.
-        }
-        
-        // PASO 3: Procesar los datos para asegurar rutas de imagen válidas y estado de 'like'.
-        if (message.sender) {
-            message.sender.profilePicturePath = getValidProfilePicturePath(message.sender.profilePicturePath);
-        } else {
-            message.sender = { username: 'Usuario Eliminado', profilePicturePath: DEFAULT_AVATAR_PATH };
-        }
-        message.isLiked = req.session.userId ? message.likes.some(like => like.toString() === req.session.userId.toString()) : false;
-
-        if (message.replies) {
-            message.replies = message.replies.map(reply => {
+            docs = replies.map(reply => {
                 if (reply.sender) {
                     reply.sender.profilePicturePath = getValidProfilePicturePath(reply.sender.profilePicturePath);
                 } else {
@@ -1217,13 +1249,18 @@ app.get('/api/messages/:id', apiLimiter, async (req, res) => {
             });
         }
         
-        res.status(200).json(message);
+        res.status(200).json({
+            docs,
+            totalPages,
+            currentPage: page
+        });
 
     } catch (error) {
-        console.error(`Error en GET /api/messages/${req.params.id}:`, error);
-        res.status(500).json({ message: 'Error en el servidor al obtener el mensaje.' });
+        console.error(`Error en GET /api/messages/${req.params.id}/replies:`, error);
+        res.status(500).json({ message: 'Error en el servidor al obtener las respuestas.' });
     }
 });
+
 
 /**
  * @route   GET /api/users/username/:username

@@ -359,3 +359,37 @@ textarea {
 .reply-message-btn:hover {
     stroke: var(--color-enlace);
 }
+
+/* ==========================================================================
+   # Estilos para la Vista de Detalle de Mensaje
+   ========================================================================== */
+
+#message-detail-view {
+    padding: 2rem 1rem;
+}
+
+#main-message-container {
+    margin-bottom: 2rem;
+}
+
+#replies-header {
+    font-size: 1.5rem;
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.5rem;
+}
+
+.reply-wrapper {
+    width: 90%;
+    margin-left: auto;
+}
+
+.load-more-container {
+    display: flex;
+    justify-content: center;
+    padding: 1rem 0;
+}
+
+#load-more-replies-btn {
+    display: block;
+    margin: 1rem auto;
+}

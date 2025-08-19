@@ -695,43 +695,114 @@ async function renderPage(path) {
         try {
             const messageId = pathname.split('/')[2];
             if (!messageId) throw new Error('ID de mensaje no válido.');
+            
+            appRoot.innerHTML = await fetchTemplate('/templates/message-detail.html');
+            
+            const mainMessageContainer = document.getElementById('main-message-container');
+            const repliesContainer = document.getElementById('replies-container');
+            const repliesHeader = document.getElementById('replies-header');
 
+            const [messageResponse, repliesResponse] = await Promise.all([
+                fetch(`/api/messages/${messageId}`),
+                fetch(`/api/messages/${messageId}/replies?page=1`)
+            ]);
+
+            if (!messageResponse.ok) {
+                const errorData = await messageResponse.json();
+                throw new Error(errorData.message || 'Mensaje no encontrado o ha sido eliminado.');
+            }
+
+            const messageData = await messageResponse.json();
+            const repliesData = repliesResponse.ok ? await repliesResponse.json() : { docs: [], totalPages: 0 };
+            
             let currentUser = null;
             try {
                 const profileResponse = await fetch('/api/profile');
                 if (profileResponse.ok) currentUser = await profileResponse.json();
             } catch (error) { /* Usuario no logueado, se ignora */ }
-    
-            const response = await fetch(`/api/messages/${messageId}`);
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Mensaje no encontrado o ha sido eliminado.');
-            }
-            const messageData = await response.json();
-    
-            appRoot.innerHTML = await fetchTemplate('/templates/message-detail.html');
+
             document.title = messageData.title;
-    
-            const mainMessageContainer = document.getElementById('main-message-container');
-            const repliesContainer = document.getElementById('replies-container');
-            const repliesHeader = document.getElementById('replies-header');
-    
+
             const mainCard = createMessageCard(messageData, currentUser);
             mainMessageContainer.appendChild(mainCard);
-    
-            if (messageData.replies && messageData.replies.length > 0) {
+            
+            let currentReplyPage = 1;
+            let totalReplyPages = repliesData.totalPages;
+            
+            const loadMoreReplies = async () => {
+                const loadMoreBtn = document.getElementById('load-more-replies-btn');
+                const repliesLoader = document.getElementById('replies-loader');
+                
+                if (loadMoreBtn) loadMoreBtn.classList.add('hidden');
+                if (repliesLoader) repliesLoader.classList.remove('hidden');
+
+                try {
+                    const res = await fetch(`/api/messages/${messageId}/replies?page=${currentReplyPage}`);
+                    const data = await res.json();
+                    
+                    data.docs.forEach(reply => {
+                        const replyCard = createMessageCard(reply, currentUser);
+                        const replyWrapper = document.createElement('div');
+                        replyWrapper.className = 'reply-wrapper';
+                        replyWrapper.appendChild(replyCard);
+                        
+                        const lineBreak = document.createElement('br');
+                        
+                        const loadMoreContainer = document.querySelector('.load-more-container');
+                        if (loadMoreContainer) {
+                            repliesContainer.insertBefore(replyWrapper, loadMoreContainer);
+                            repliesContainer.insertBefore(lineBreak, loadMoreContainer);
+                        } else {
+                            repliesContainer.appendChild(replyWrapper);
+                            repliesContainer.appendChild(lineBreak);
+                        }
+                    });
+
+                    if (currentReplyPage >= totalReplyPages) {
+                        document.querySelector('.load-more-container')?.remove();
+                    } else {
+                        if (loadMoreBtn) loadMoreBtn.classList.remove('hidden');
+                    }
+                } catch (error) {
+                    console.error("Error al cargar más respuestas:", error);
+                } finally {
+                    if (repliesLoader) repliesLoader.classList.add('hidden');
+                }
+            };
+            
+            if (repliesData.docs.length > 0) {
                 repliesHeader.classList.remove('hidden');
-                messageData.replies.forEach(reply => {
+                repliesData.docs.forEach(reply => {
                     const replyCard = createMessageCard(reply, currentUser);
                     const replyWrapper = document.createElement('div');
-                    replyWrapper.style.width = '90%';
-                    replyWrapper.style.marginLeft = 'auto';
+                    replyWrapper.className = 'reply-wrapper';
                     replyWrapper.appendChild(replyCard);
                     repliesContainer.appendChild(replyWrapper);
                     
                     const lineBreak = document.createElement('br');
                     repliesContainer.appendChild(lineBreak);
                 });
+            }
+            
+            if (totalReplyPages > 1) {
+                const loadMoreContainer = document.createElement('div');
+                loadMoreContainer.className = 'load-more-container';
+
+                const repliesLoader = document.createElement('div');
+                repliesLoader.id = 'replies-loader';
+                repliesLoader.className = 'loader hidden';
+                loadMoreContainer.appendChild(repliesLoader);
+
+                const loadMoreBtn = document.createElement('button');
+                loadMoreBtn.id = 'load-more-replies-btn';
+                loadMoreBtn.className = 'button-primary';
+                loadMoreBtn.textContent = 'Cargar más';
+                loadMoreBtn.addEventListener('click', () => {
+                    currentReplyPage++;
+                    loadMoreReplies();
+                });
+                loadMoreContainer.appendChild(loadMoreBtn);
+                repliesContainer.appendChild(loadMoreContainer);
             }
 
             const detailViewContainer = document.getElementById('message-detail-view');
