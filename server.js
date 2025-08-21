@@ -24,6 +24,7 @@ const multer = require('multer');
 const sharp = require('sharp');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
+const axios = require('axios');
 
 
 // =================================================================
@@ -67,8 +68,8 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Medida de seguridad crítica: la aplicación no debe iniciar sin un secreto de sesión.
-if (!process.env.SESSION_SECRET) {
-    console.error('FATAL ERROR: La variable de entorno SESSION_SECRET no está definida.');
+if (!process.env.SESSION_SECRET || !process.env.RECAPTCHA_SECRET_KEY) {
+    console.error('FATAL ERROR: Las variables de entorno SESSION_SECRET o RECAPTCHA_SECRET_KEY no están definidas.');
     process.exit(1); // Termina el proceso si la configuración esencial falta.
 }
 
@@ -188,6 +189,39 @@ const isAuthenticated = (req, res, next) => {
     }
     next();
 };
+
+/**
+ * @function verifyRecaptcha
+ * @description Middleware para verificar un token de Google reCAPTCHA v2.
+ * Realiza una petición server-to-server a la API de Google para validar la respuesta del usuario.
+ * @param {import('express').Request} req - Objeto de la petición de Express.
+ * @param {import('express').Response} res - Objeto de la respuesta de Express.
+ * @param {import('express').NextFunction} next - Función callback para pasar al siguiente middleware.
+ */
+const verifyRecaptcha = async (req, res, next) => {
+    try {
+        const token = req.body['g-recaptcha-response'];
+        if (!token) {
+            return res.status(400).json({ message: 'Por favor, completa la verificación reCAPTCHA.' });
+        }
+        
+        const secretKey = process.env.RECAPTCHA_SECRET_KEY;
+        const verificationUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${secretKey}&response=${token}&remoteip=${req.ip}`;
+
+        const response = await axios.post(verificationUrl);
+        const { success } = response.data;
+
+        if (success) {
+            next();
+        } else {
+            return res.status(401).json({ message: 'Fallo en la verificación reCAPTCHA. Inténtalo de nuevo.' });
+        }
+    } catch (error) {
+        console.error('Error en el middleware verifyRecaptcha:', error);
+        return res.status(500).json({ message: 'Error del servidor al validar el reCAPTCHA.' });
+    }
+};
+
 
 // =================================================================
 //  BD CONNECTION
@@ -319,7 +353,7 @@ const LOCKOUT_TIME = 24 * 60 * 60 * 1000; // 24 horas de bloqueo.
  * @returns {object} 403 - IP bloqueada o cuenta eliminada.
  * @returns {object} 500 - Error del servidor.
  */
-app.post('/login', sensitiveRouteLimiter, async (req, res) => {
+app.post('/login', sensitiveRouteLimiter, verifyRecaptcha, async (req, res) => {
     const { loginIdentifier, password } = req.body;
     const ip = req.ip;
 
@@ -409,6 +443,8 @@ app.post('/login', sensitiveRouteLimiter, async (req, res) => {
 app.post('/register',
     // El limitador de peticiones se aplica ANTES de procesar el archivo para prevenir DoS.
     sensitiveRouteLimiter,
+    // El middleware de reCAPTCHA se aplica ANTES de procesar el archivo.
+    verifyRecaptcha,
     // Middleware de Multer para manejar la subida del archivo.
     (req, res, next) => {
         upload.single('profilePicture')(req, res, (err) => {
