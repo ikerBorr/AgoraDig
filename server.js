@@ -206,8 +206,6 @@ mongoose.connect(mongoUrl)
  * Define la estructura, tipos de datos y validaciones para los documentos de usuario.
  * @property {string} password - No se devuelve en las consultas por defecto (`select: false`).
  * @property {string} recoveryPIN - PIN de recuperación hasheado, no se devuelve por defecto.
- * @property {number} loginAttempts - Contador de intentos de login fallidos, no se devuelve por defecto.
- * @property {Date} lockoutUntil - Fecha hasta la que la cuenta está bloqueada, no se devuelve por defecto.
  * @property {object} timestamps - Añade automáticamente los campos `createdAt` y `updatedAt`.
  */
 const userSchema = new mongoose.Schema({
@@ -223,14 +221,28 @@ const userSchema = new mongoose.Schema({
     acceptsPublicity: { type: Boolean, default: false, index: true },
     role: { type: String, enum: ['user', 'admin', 'moderator'], default: 'user', index: true },
     userStatus: { type: String, enum: ['active', 'verified', 'banned', 'deleted'], default: 'active', index: true },
-    strikes: { type: Number, default: 0 },
-    loginAttempts: { type: Number, default: 0, select: false },
-    lockoutUntil: { type: Date, select: false }
+    strikes: { type: Number, default: 0 }
 }, {
     timestamps: true,
 });
 
 const User = mongoose.model('User', userSchema);
+
+/**
+ * @description Esquema para rastrear intentos de inicio de sesión fallidos por IP e identificador.
+ * Utiliza un índice TTL para limpiar automáticamente los registros antiguos después de 24 horas.
+ */
+const loginAttemptSchema = new mongoose.Schema({
+    ip: { type: String, required: true },
+    loginIdentifier: { type: String, required: true, lowercase: true },
+    attempts: { type: Number, required: true, default: 0 },
+    lockoutUntil: { type: Date },
+    createdAt: { type: Date, default: Date.now, expires: '24h' } // TTL: El documento se elimina 24h después de su creación.
+});
+// Índice compuesto para optimizar la búsqueda de intentos de login.
+loginAttemptSchema.index({ ip: 1, loginIdentifier: 1 });
+const LoginAttempt = mongoose.model('LoginAttempt', loginAttemptSchema);
+
 
 /**
  * @constant upload
@@ -297,20 +309,21 @@ const LOCKOUT_TIME = 24 * 60 * 60 * 1000; // 24 horas de bloqueo.
 
 /**
  * @route   POST /login
- * @description Autentica a un usuario y crea una sesión. Implementa una política de bloqueo de cuenta
- * tras múltiples intentos fallidos para prevenir ataques de fuerza bruta.
+ * @description Autentica a un usuario y crea una sesión. Implementa una política de bloqueo por IP
+ * para prevenir ataques de fuerza bruta sin afectar al usuario legítimo desde otra IP.
  * @access  Public
  * @param   {object} req.body - Cuerpo de la petición con `loginIdentifier` (username o email) y `password`.
  * @returns {object} 200 - Mensaje de éxito.
  * @returns {object} 400 - Error de validación, faltan campos.
  * @returns {object} 401 - Credenciales incorrectas.
- * @returns {object} 403 - Cuenta bloqueada o eliminada.
+ * @returns {object} 403 - IP bloqueada o cuenta eliminada.
  * @returns {object} 500 - Error del servidor.
  */
 app.post('/login', sensitiveRouteLimiter, async (req, res) => {
-    try {
-        const { loginIdentifier, password } = req.body;
+    const { loginIdentifier, password } = req.body;
+    const ip = req.ip;
 
+    try {
         // Validación inicial de campos.
         if (!loginIdentifier || !password) {
             const errors = {};
@@ -319,64 +332,61 @@ app.post('/login', sensitiveRouteLimiter, async (req, res) => {
             return res.status(400).json({ errors });
         }
 
-        // Busca al usuario por nombre de usuario o email y recupera campos de seguridad.
-        const user = await User.findOne({
-            $or: [{ username: loginIdentifier }, { email: loginIdentifier.toLowerCase() }]
-        }).select('+password +loginAttempts +lockoutUntil');
+        const identifier = loginIdentifier.toLowerCase();
+        
+        // 1. Comprobar el estado de intentos para la combinación IP/identificador.
+        const loginAttempt = await LoginAttempt.findOne({ ip, loginIdentifier: identifier });
 
-        // Si el usuario no existe, devuelve un error específico.
-        if (!user) {
-            return res.status(401).json({ errors: { loginIdentifier: 'El usuario o email no existe.' } });
+        if (loginAttempt && loginAttempt.lockoutUntil && loginAttempt.lockoutUntil > Date.now()) {
+            const timeLeftMs = loginAttempt.lockoutUntil.getTime() - Date.now();
+            const hoursLeft = Math.ceil(timeLeftMs / (1000 * 60 * 60));
+            return res.status(403).json({ 
+                message: `Demasiados intentos fallidos desde esta red. Por seguridad, el acceso para '${loginIdentifier}' ha sido bloqueado temporalmente. Inténtelo de nuevo en aproximadamente ${hoursLeft} horas.` 
+            });
         }
+        
+        // 2. Buscar al usuario y verificar sus datos.
+        const user = await User.findOne({
+            $or: [{ username: loginIdentifier }, { email: identifier }]
+        }).select('+password');
 
-        // Comprueba si la cuenta ha sido eliminada.
+        // Si el usuario no existe o la contraseña es incorrecta, se gestiona el intento fallido.
+        const isMatch = user ? await bcrypt.compare(password, user.password) : false;
+
+        if (!user || !isMatch) {
+            const currentAttempts = (loginAttempt ? loginAttempt.attempts : 0) + 1;
+            
+            let update = { $inc: { attempts: 1 } };
+            let message = '';
+            
+            if (currentAttempts >= MAX_LOGIN_ATTEMPTS) {
+                update.lockoutUntil = new Date(Date.now() + LOCKOUT_TIME);
+                message = 'Credenciales incorrectas. Se ha alcanzado el número máximo de intentos. El acceso ha sido bloqueado por 24 horas por seguridad.';
+            } else {
+                const remainingAttempts = MAX_LOGIN_ATTEMPTS - currentAttempts;
+                const attemptText = remainingAttempts > 1 ? 'intentos' : 'intento';
+                message = `La contraseña es incorrecta. Te quedan ${remainingAttempts} ${attemptText}.`;
+            }
+
+            await LoginAttempt.updateOne({ ip, loginIdentifier: identifier }, update, { upsert: true });
+
+            return res.status(401).json({ errors: { password: message } });
+        }
+        
+        // 3. Comprobar si la cuenta del usuario tiene alguna restricción.
         if (user.userStatus === 'deleted') {
             return res.status(403).json({ message: 'Esta cuenta ha sido eliminada y ya no se puede acceder a ella.' });
         }
-
-        // Comprueba si la cuenta está bloqueada antes de verificar la contraseña.
-        if (user.lockoutUntil && user.lockoutUntil > Date.now()) {
-            const timeLeftMs = user.lockoutUntil.getTime() - Date.now();
-            const hoursLeft = Math.ceil(timeLeftMs / (1000 * 60 * 60));
-            return res.status(403).json({ 
-                message: `Cuenta bloqueada por demasiados intentos fallidos. Por favor, inténtelo de nuevo en aproximadamente ${hoursLeft} horas.` 
-            });
+        if (user.userStatus === 'banned') {
+            return res.status(403).json({ message: 'Esta cuenta ha sido suspendida. Contacta con soporte para más información.' });
+        }
+        
+        // 4. Si el login es exitoso, limpiar el registro de intentos y crear la sesión.
+        if (loginAttempt) {
+            await loginAttempt.deleteOne();
         }
 
-        const isMatch = await bcrypt.compare(password, user.password);
-
-        // Si la contraseña es incorrecta, se incrementa el contador de intentos.
-        if (!isMatch) {
-            user.loginAttempts += 1;
-            
-            // Si se alcanza el límite de intentos, se bloquea la cuenta.
-            if (user.loginAttempts >= MAX_LOGIN_ATTEMPTS) {
-                user.lockoutUntil = new Date(Date.now() + LOCKOUT_TIME);
-                await user.save();
-                return res.status(403).json({ message: 'Demasiados intentos fallidos. Su cuenta ha sido bloqueada por 24 horas por seguridad.' });
-            }
-            
-            await user.save(); // Guarda el intento fallido.
-
-            // Informa del error y los intentos restantes.
-            const remainingAttempts = MAX_LOGIN_ATTEMPTS - user.loginAttempts;
-            const attemptText = remainingAttempts > 1 ? 'intentos' : 'intento';
-            
-            return res.status(401).json({ 
-                errors: { 
-                    password: `La contraseña es incorrecta. Te quedan ${remainingAttempts} ${attemptText}.` 
-                } 
-            });
-        }
-
-        // Si el login es exitoso, se resetea el contador de intentos y el bloqueo.
-        if (user.loginAttempts > 0 || user.lockoutUntil) {
-            user.loginAttempts = 0;
-            user.lockoutUntil = null;
-            await user.save();
-        }
-
-        req.session.userId = user._id; // Crea la sesión para el usuario.
+        req.session.userId = user._id;
         res.status(200).json({ message: 'Inicio de sesión exitoso.' });
 
     } catch (error) {
