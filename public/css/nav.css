@@ -34,6 +34,7 @@ a.nav-link {
   transition: background-color 0.2s, color 0.2s;
   gap: 8px; /* Espacio entre icono y texto */
 }
+
 a.nav-link:hover {
   color: var(--color-enlace);
   text-decoration: none;
@@ -72,10 +73,10 @@ body.night-mode .icon-sun { display: none; }
   display: none; /* Oculto en escritorio */
 }
 
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   .menu-toggle {
     display: block;
-    z-index: 1001;
+    z-index: 1101;
   }
 
   nav#main-nav {
@@ -86,8 +87,7 @@ body.night-mode .icon-sun { display: none; }
     max-width: 45vw;
     height: 100vh;
     /* Efecto de vidrio para el fondo */
-    background-color: hsla(var(--tono-neutro), var(--saturacion-neutra), 95%, 0.85);
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(8px);
     flex-direction: column;
     align-items: flex-start;
