@@ -3,6 +3,12 @@
  * @description Estilos para el header, la navegación principal y el menú móvil.
  */
 
+/* Establece un contexto de apilamiento para todo el header, asegurando que esté por encima del main content. */
+header {
+  position: relative;
+  z-index: 1000;
+}
+
 .header-container {
   position: fixed;
   display: flex;
@@ -79,13 +85,16 @@ body.night-mode .icon-sun { display: none; }
     width: 100%;
     max-width: 45vw;
     height: 100vh;
-    background-color: var(--color-fondo);
+    /* Efecto de vidrio para el fondo */
+    background-color: hsla(var(--tono-neutro), var(--saturacion-neutra), 95%, 0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     flex-direction: column;
     align-items: flex-start;
     padding: 80px 20px 20px;
     box-shadow: 2px 0 10px rgba(0, 0, 0, 0.2);
     transition: left 0.3s ease-in-out;
-    z-index: 1000;
+    z-index: 1100;
     gap: 15px;
   }
 

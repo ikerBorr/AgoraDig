@@ -129,7 +129,7 @@ section.form {
 /* Icono posicionado absolutamente dentro del contenedor */
 .password-toggle-icon {
   position: absolute;
-  top: 26px; /* Centrado verticalmente */
+  top: 26px; /* Posición fija desde arriba, centrada en el input */
   transform: translateY(-50%);
   right: 15px; /* Espacio desde el borde derecho */
   cursor: pointer;
@@ -141,4 +141,24 @@ section.form {
 .input-group.password-wrapper input[type="password"], 
 .input-group.password-wrapper input[type="text"] {
   padding-right: 45px;
+}
+
+/* --- Estilos para Grupos de Checkbox (Términos, etc.) --- */
+.form .terms-group {
+  display: flex;
+  align-items: center; /* Alinea verticalmente la casilla y el texto */
+  gap: 10px; /* Espacio entre la casilla y el texto */
+  text-align: left;
+  margin: 5px 0;
+}
+
+.form .terms-group input[type="checkbox"] {
+  margin: 0; /* Elimina márgenes por defecto que puedan desalinear */
+  flex-shrink: 0; /* Evita que la casilla se encoja si el texto es largo */
+}
+
+.form .terms-group label {
+  font-weight: normal;
+  font-size: 0.9em;
+  line-height: 1.4;
 }
