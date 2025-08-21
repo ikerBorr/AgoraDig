@@ -81,8 +81,17 @@ app.set('trust proxy', 1);
 //  MIDDLEWARE
 // =================================================================
 
-// Aplica cabeceras de seguridad HTTP básicas (CSP, XSS Protection, etc.).
-app.use(helmet());
+// Aplica cabeceras de seguridad HTTP, incluyendo una CSP personalizada.
+app.use(
+    helmet.contentSecurityPolicy({
+        directives: {
+            ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+            "script-src": ["'self'", "https://www.google.com", "https://www.gstatic.com"],
+            "frame-src": ["'self'", "https://www.google.com"],
+        },
+    })
+);
+
 // Parsea cuerpos de petición con formato JSON.
 app.use(express.json());
 // Sirve estáticamente los archivos subidos (fotos de perfil).
