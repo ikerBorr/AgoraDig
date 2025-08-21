@@ -129,7 +129,7 @@ section.form {
 /* Icono posicionado absolutamente dentro del contenedor */
 .password-toggle-icon {
   position: absolute;
-  top: 58%; /* Centrado verticalmente */
+  top: 26px; /* Centrado verticalmente */
   transform: translateY(-50%);
   right: 15px; /* Espacio desde el borde derecho */
   cursor: pointer;
