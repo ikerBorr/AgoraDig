@@ -1116,6 +1116,14 @@ async function renderPage(path) {
             sessionStorage.removeItem('registrationPin');
         }
     }
+    
+    // Renderizado explícito de Turnstile para SPAs
+    if (pathname === '/login' || pathname === '/register') {
+        const widgetElement = appRoot.querySelector('.cf-turnstile');
+        if (widgetElement && typeof turnstile !== 'undefined') {
+            turnstile.render(widgetElement);
+        }
+    }
 
     if(templatePath) {
         await loadAndExecuteScript(templatePath);
