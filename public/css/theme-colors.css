@@ -1,4 +1,8 @@
-/* theme-colors.css (Versión Enriquecida) */
+/**
+ * @file theme-colors.css
+ * @description Define la paleta de colores principal, los modos de tema (claro/oscuro)
+ * y estilos base para elementos globales de la aplicación.
+ */
 :root {
   --tono-primario: 210;
   --saturacion-primaria: 70%;
@@ -87,37 +91,8 @@ button {
 
 small { color: var(--color-texto-secundario); }
 
-/* Icons Sun and Moon */
-#theme-toggle {
-    margin-left: auto;
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 5px;
-}
-
-#theme-toggle svg {
-    width: 36px;
-    height: 36px;
-    stroke: var(--color-texto); 
-}
-
-#theme-toggle:hover svg {
-    stroke: var(--color-enlace);
-}
-
-.icon-moon {
-    display: none;
-}
-
-body.night-mode .icon-moon {
-    display: inline-block;
-}
-body.night-mode .icon-sun {
-    display: none;
-}
-
-/*--- Icons Menu ---*/
+/* --- Estilos para Botones de Iconos --- */
+/* Afecta a #theme-toggle y .menu-toggle */
 #theme-toggle, .menu-toggle {
     background: none;
     border: none;
@@ -128,6 +103,8 @@ body.night-mode .icon-sun {
 }
 
 #theme-toggle svg, .menu-toggle svg {
+    width: 36px;
+    height: 36px;
     stroke: var(--color-texto);
     transition: stroke 0.2s;
 }
@@ -136,8 +113,19 @@ body.night-mode .icon-sun {
     stroke: var(--color-enlace);
 }
 
+/* Lógica de visibilidad para iconos de tema */
+.icon-moon {
+    display: none;
+}
+body.night-mode .icon-moon {
+    display: inline-block;
+}
+body.night-mode .icon-sun {
+    display: none;
+}
 
-/* --- Botón de Solo Icono --- */
+
+/* --- Botón de Solo Icono (Genérico) --- */
 /* Ideal para botones de menú, editar, etc. */
 .button--icon {
   background-color: transparent;

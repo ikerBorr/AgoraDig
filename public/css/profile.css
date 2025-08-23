@@ -121,16 +121,10 @@
 }
 
 /* =================================================================
-   ESTILOS PARA EL MODAL DE EDICIÓN DE PERFIL (DEPURADO)
+   ESTILOS PARA EL MODAL DE EDICIÓN DE PERFIL
    ================================================================= */
 
-/* Todos los estilos de .profile-modal-overlay, .profile-modal-content,
-   botones y formularios han sido eliminados.
-   Ahora se heredan de las clases genéricas (.modal-overlay, .modal-content, etc.)
-   definidas en messages.css. */
-
 .modal-content {
-    /* Se puede mantener una anulación específica si es necesario, por ejemplo: */
     max-width: 500px;
 }
 

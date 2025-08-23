@@ -164,7 +164,7 @@
 }
 
 /* ==========================================================================
-   # Estilos Genéricos para Modales (UNIFICADO)
+   # Estilos Genéricos para Modales
    ========================================================================== */
 
 .modal-overlay {
@@ -227,7 +227,7 @@
     color: var(--color-texto);
 }
 
-/* --- Formulario Dentro del Modal (UNIFICADO) --- */
+/* --- Formulario Dentro del Modal --- */
 .form-group {
     margin-bottom: 1.25rem;
     text-align: left;
@@ -270,7 +270,7 @@ textarea {
     margin-top: 1rem;
 }
 
-/* --- Mensajes de Error en el Modal (UNIFICADO) --- */
+/* --- Mensajes de Error en el Modal --- */
 #modal-error-message, .profile-modal-error-text {
     text-align: center;
     margin-bottom: 1rem;
@@ -278,7 +278,7 @@ textarea {
     color: #e74c3c;
 }
 
-/* --- Estilos para Botones de Modales (UNIFICADO) --- */
+/* --- Estilos para Botones de Modales --- */
 .modal-actions {
     display: flex;
     justify-content: flex-end;
@@ -319,7 +319,6 @@ textarea {
    # Estilos del Modal de Confirmación de Borrado
    ========================================================================== */
 
-/* Se simplifica para usar la clase base .modal-overlay */
 .delete-confirmation-overlay .modal-content {
     transform: none; /* Mantiene la anulación de la animación específica */
     transition: none;
