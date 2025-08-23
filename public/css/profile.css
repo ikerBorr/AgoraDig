@@ -93,160 +93,45 @@
 /* Botón para cerrar sesión */
 #logout-button {
   /* --- Colores y Apariencia --- */
-  /* Rojo para indicar una acción destructiva o de advertencia, como cerrar sesión */
   background-color: hsl(0, 80%, 60%); 
-  /* Borde rojo más oscuro para dar profundidad */
   border: 1px solid hsl(0, 70%, 45%);     
-  /* Texto en color blanco para máxima legibilidad sobre el fondo rojo */
   color: #FFFFFF;                     
 
   /* --- Diseño y Espaciado --- */
-  /* Permite alinear el icono y el texto correctamente en la misma línea */
   display: inline-flex;       
-  /* Centra verticalmente el contenido (icono y texto) dentro del botón */
   align-items: center;        
-  /* Espacio de 8px entre el icono SVG y el texto "Salir" */
   gap: 8px;                   
-  /* Margen superior para separarlo de la sección de metadatos */
   margin-top: 25px;           
-  /* Espaciado interno generoso para que el botón sea fácil de pulsar */
   padding: 10px 20px;         
   
   /* --- Tipografía y Comportamiento --- */
-  font-weight: bold;          /* Texto en negrita para darle énfasis */
-  border-radius: 8px;         /* Bordes redondeados para un aspecto moderno */
-  cursor: pointer;            /* Cursor de mano para indicar que el elemento es interactivo */
-  /* Transición suave para los cambios de color al pasar el cursor */
+  font-weight: bold;
+  border-radius: 8px;
+  cursor: pointer;
   transition: background-color 0.2s ease, border-color 0.2s ease; 
 }
 
-/* Efecto visual al pasar el cursor sobre el botón de cerrar sesión */
 #logout-button:hover {
-  /* El fondo se oscurece ligeramente para dar feedback visual al usuario */
   background-color: hsl(0, 80%, 55%); 
-  /* El borde también se oscurece para mantener la consistencia del diseño */
   border-color: hsl(0, 70%, 40%);
 }
 
-/* Estilo para el icono SVG que se encuentra dentro del botón */
 #logout-button svg {
-  /* La propiedad 'currentColor' hace que el trazo del icono herede el color del texto del botón (blanco) */
-  /* Esto asegura que si se cambia el color del texto del botón, el icono se actualizará automáticamente */
   stroke: currentColor; 
 }
 
 /* =================================================================
-   ESTILOS PARA EL MODAL DE EDICIÓN DE PERFIL (CORREGIDO)
+   ESTILOS PARA EL MODAL DE EDICIÓN DE PERFIL (DEPURADO)
    ================================================================= */
 
-.profile-modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.7); /* Mantenemos un negro semitransparente para el overlay */
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-    opacity: 1;
-    visibility: visible;
-    transition: opacity 0.3s ease, visibility 0.3s ease;
-}
+/* Todos los estilos de .profile-modal-overlay, .profile-modal-content,
+   botones y formularios han sido eliminados.
+   Ahora se heredan de las clases genéricas (.modal-overlay, .modal-content, etc.)
+   definidas en messages.css. */
 
-.profile-modal-overlay.hidden {
-    opacity: 0;
-    visibility: hidden;
-}
-
-.profile-modal-content {
-    background-color: var(--color-fondo); /* CORREGIDO: Usa la variable de fondo principal del tema. */
-    padding: 2rem 2.5rem;
-    border-radius: 8px;
-    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.25);
-    position: relative;
-    width: 90%;
+.modal-content {
+    /* Se puede mantener una anulación específica si es necesario, por ejemplo: */
     max-width: 500px;
-    transform: scale(1);
-    transition: transform 0.3s ease;
-}
-
-.profile-modal-overlay.hidden .profile-modal-content {
-    transform: scale(0.9);
-}
-
-.profile-modal-close-button {
-    position: absolute;
-    top: 10px;
-    right: 15px;
-    background: none;
-    border: none;
-    font-size: 2rem;
-    color: var(--color-texto-secundario); /* CORREGIDO: Usa la variable de texto secundario. */
-    cursor: pointer;
-    line-height: 1;
-    padding: 0;
-}
-
-.profile-modal-close-button:hover {
-    color: var(--color-texto); /* CORREGIDO: Usa la variable de texto principal. */
-}
-
-.profile-modal-content h2 {
-    margin-top: 0;
-    margin-bottom: 1.5rem;
-    color: var(--color-texto); /* CORREGIDO: Usa la variable de texto principal. */
-}
-
-.profile-modal-form-group {
-    margin-bottom: 1rem;
-    text-align: left;
-}
-
-.profile-modal-form-group label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-weight: bold;
-    color: var(--color-texto-secundario); /* CORREGIDO: Usa la variable de texto secundario. */
-}
-
-.profile-modal-form-group input[type="text"],
-.profile-modal-form-group textarea {
-    width: 100%;
-    padding: 0.75rem;
-    border: 1px solid var(--color-borde); /* CORREGIDO: Usa la variable de borde. */
-    border-radius: 4px;
-    background-color: var(--color-fondo-input); /* CORREGIDO: Usa la variable de fondo para inputs. */
-    color: var(--color-texto-input); /* CORREGIDO: Usa la variable de texto para inputs. */
-    font-size: 1rem;
-    box-sizing: border-box;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-/* AÑADIDO: Estilo de foco consistente con otros modales */
-.profile-modal-form-group input[type="text"]:focus,
-.profile-modal-form-group textarea:focus {
-    outline: none;
-    border-color: var(--color-enlace);
-    box-shadow: 0 0 0 3px var(--color-foco-primario);
-}
-
-
-.profile-modal-form-group textarea {
-    resize: vertical;
-    min-height: 100px;
-}
-
-.profile-modal-error-text {
-    color: #e74c3c; /* Mantenemos un color de error explícito consistente con messages.css */
-    margin-top: 1rem;
-    text-align: center;
-    font-weight: bold;
-}
-
-.profile-modal-error-text:not(.hidden) {
-    display: block;
 }
 
 
@@ -254,33 +139,28 @@
    ESTILOS PARA EL PANEL DE ADMINISTRACIÓN Y MODERACIÓN
    ================================================================= */
 
-/* --- Contenedor de Información de Moderación (Insignias) --- */
 .moderation-details {
     display: flex;
-    flex-wrap: wrap; /* Permite que las insignias pasen a la siguiente línea en pantallas pequeñas */
+    flex-wrap: wrap;
     justify-content: center;
-    gap: 0.75rem; /* Espacio entre insignias */
+    gap: 0.75rem;
     margin-top: 0.5rem;
 }
 
-/* Estilo base para todas las insignias */
 .role-badge, .status-badge, .strikes-badge {
     padding: 0.25em 0.6em;
     font-size: 0.85em;
     font-weight: bold;
-    border-radius: 15px; /* Bordes redondeados para una apariencia de píldora */
+    border-radius: 15px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 
-/* Colores específicos para cada tipo de insignia */
 .role-badge { background-color: hsla(var(--tono-primario), var(--saturacion-primaria), 45%, 0.8); color: white; }
 .status-badge.status-active { background-color: hsl(130, 60%, 40%); color: white; }
 .status-badge.status-banned { background-color: hsl(0, 70%, 50%); color: white; }
 .strikes-badge { background-color: hsl(35, 85%, 55%); color: white; }
 
-
-/* --- Contenedor y Formulario del Panel --- */
 .admin-form-wrapper {
     margin-top: 30px;
     padding-top: 20px;
@@ -290,33 +170,31 @@
 .admin-form-wrapper h3 {
     margin-top: 0;
     margin-bottom: 20px;
-    font-size: 1.5rem; /* Tamaño coherente con otros subtítulos */
+    font-size: 1.5rem;
     color: var(--color-texto);
 }
 
 #admin-edit-form {
     display: flex;
     flex-direction: column;
-    gap: 1rem; /* Espacio entre los grupos de formulario */
+    gap: 1rem;
     max-width: 350px;
-    margin: 0 auto; /* Centra el formulario dentro del wrapper */
+    margin: 0 auto;
 }
 
-/* Grupo para alinear etiqueta e input en la misma línea */
 .form-group-inline {
     display: flex;
     align-items: center;
-    justify-content: space-between; /* Alinea la etiqueta a la izquierda y el input a la derecha */
+    justify-content: space-between;
     gap: 1rem;
 }
 
 .form-group-inline label {
     font-weight: bold;
     color: var(--color-texto-secundario);
-    flex-shrink: 0; /* Evita que la etiqueta se encoja */
+    flex-shrink: 0;
 }
 
-/* Estilo para los inputs y selects del panel, basado en forms.css */
 #admin-edit-form input[type="number"],
 #admin-edit-form select {
     padding: 8px 12px;
@@ -325,7 +203,7 @@
     border: 1px solid var(--color-borde);
     border-radius: 5px;
     font-size: 1em;
-    width: 60%; /* Ocupa el espacio restante */
+    width: 60%;
     box-sizing: border-box;
     transition: border-color 0.2s, box-shadow 0.2s;
 }
@@ -354,7 +232,6 @@
     transform: translateY(-2px);
 }
 
-/* Mensajes de feedback (éxito/error) */
 #admin-form-message {
     text-align: center;
     font-weight: bold;
