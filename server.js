@@ -395,15 +395,21 @@ app.post('/login', sensitiveRouteLimiter, verifyTurnstile, async (req, res) => {
             });
         }
         
-        // 2. Buscar al usuario y verificar sus datos.
+        // 2. Buscar al usuario.
         const user = await User.findOne({
             $or: [{ username: loginIdentifier }, { email: identifier }]
         }).select('+password');
 
-        // Si el usuario no existe o la contraseña es incorrecta, se gestiona el intento fallido.
-        const isMatch = user ? await bcrypt.compare(password, user.password) : false;
+        // Si el usuario no existe, se gestiona como un intento fallido para prevenir enumeración.
+        if (!user) {
+            await LoginAttempt.updateOne({ ip, loginIdentifier: identifier }, { $inc: { attempts: 1 } }, { upsert: true });
+            return res.status(401).json({ errors: { loginIdentifier: 'El usuario o email proporcionado no existe.' } });
+        }
 
-        if (!user || !isMatch) {
+        // Si el usuario existe, se comprueba la contraseña.
+        const isMatch = await bcrypt.compare(password, user.password);
+
+        if (!isMatch) {
             const currentAttempts = (loginAttempt ? loginAttempt.attempts : 0) + 1;
             
             let update = { $inc: { attempts: 1 } };
@@ -411,7 +417,7 @@ app.post('/login', sensitiveRouteLimiter, verifyTurnstile, async (req, res) => {
             
             if (currentAttempts >= MAX_LOGIN_ATTEMPTS) {
                 update.lockoutUntil = new Date(Date.now() + LOCKOUT_TIME);
-                message = 'Credenciales incorrectas. Se ha alcanzado el número máximo de intentos. El acceso ha sido bloqueado por 24 horas por seguridad.';
+                message = 'Contraseña incorrecta. Se ha alcanzado el número máximo de intentos. El acceso ha sido bloqueado por 24 horas por seguridad.';
             } else {
                 const remainingAttempts = MAX_LOGIN_ATTEMPTS - currentAttempts;
                 const attemptText = remainingAttempts > 1 ? 'intentos' : 'intento';
