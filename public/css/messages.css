@@ -167,7 +167,8 @@
    # Estilos Genéricos para Modales
    ========================================================================== */
 
-.modal-overlay {
+.modal-overlay,
+.delete-confirmation-overlay {
     position: fixed;
     top: 0; left: 0;
     width: 100%; height: 100%;
@@ -182,7 +183,8 @@
     padding: 1rem;
 }
 
-.modal-overlay:not(.hidden) {
+.modal-overlay:not(.hidden),
+.delete-confirmation-overlay.visible {
     opacity: 1;
     visibility: visible;
 }
