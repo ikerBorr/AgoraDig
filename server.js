@@ -67,9 +67,9 @@ function getValidProfilePicturePath(picturePath) {
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Medida de seguridad crítica: la aplicación no debe iniciar sin un secreto de sesión.
-if (!process.env.SESSION_SECRET || !process.env.RECAPTCHA_SECRET_KEY) {
-    console.error('FATAL ERROR: Las variables de entorno SESSION_SECRET o RECAPTCHA_SECRET_KEY no están definidas.');
+// Medida de seguridad crítica: la aplicación no debe iniciar sin los secretos requeridos.
+if (!process.env.SESSION_SECRET || !process.env.TURNSTILE_SECRET_KEY) {
+    console.error('FATAL ERROR: Las variables de entorno SESSION_SECRET o TURNSTILE_SECRET_KEY no están definidas.');
     process.exit(1); // Termina el proceso si la configuración esencial falta.
 }
 
@@ -81,16 +81,8 @@ app.set('trust proxy', 1);
 //  MIDDLEWARE
 // =================================================================
 
-// Aplica cabeceras de seguridad HTTP, incluyendo una CSP personalizada.
-app.use(
-    helmet.contentSecurityPolicy({
-        directives: {
-            ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-            "script-src": ["'self'", "https://www.google.com", "https://www.gstatic.com"],
-            "frame-src": ["'self'", "https://www.google.com"],
-        },
-    })
-);
+// Aplica cabeceras de seguridad HTTP por defecto de Helmet.
+app.use(helmet());
 
 // Parsea cuerpos de petición con formato JSON.
 app.use(express.json());
@@ -115,6 +107,45 @@ app.use(session({
 
 // Sirve los archivos estáticos del frontend (HTML, CSS, JS del cliente).
 app.use(express.static(path.join(__dirname, 'public')));
+
+/**
+ * @function verifyTurnstile
+ * @description Middleware para verificar un token de Cloudflare Turnstile.
+ * Realiza una petición server-to-server a la API de Cloudflare para validar la respuesta del usuario.
+ * @param {import('express').Request} req - Objeto de la petición de Express.
+ * @param {import('express').Response} res - Objeto de la respuesta de Express.
+ * @param {import('express').NextFunction} next - Función callback para pasar al siguiente middleware.
+ */
+const verifyTurnstile = async (req, res, next) => {
+    try {
+        const token = req.body['cf-turnstile-response'];
+        if (!token) {
+            return res.status(400).json({ message: 'Por favor, completa la verificación anti-bot.' });
+        }
+
+        const secretKey = process.env.TURNSTILE_SECRET_KEY;
+        
+        const formData = new FormData();
+        formData.append('secret', secretKey);
+        formData.append('response', token);
+        formData.append('remoteip', req.ip);
+
+        const response = await axios.post('https://challenges.cloudflare.com/turnstile/v0/siteverify', formData);
+
+        const outcome = response.data;
+
+        if (outcome.success) {
+            next();
+        } else {
+            console.error('Fallo en la verificación de Turnstile, códigos de error:', outcome['error-codes']);
+            return res.status(401).json({ message: 'Fallo en la verificación anti-bot. Inténtalo de nuevo.' });
+        }
+    } catch (error) {
+        console.error('Error en el middleware verifyTurnstile:', error);
+        return res.status(500).json({ message: 'Error del servidor al validar el desafío anti-bot.' });
+    }
+};
+
 
 /**
  * @function isModeratorOrAdmin
@@ -197,38 +228,6 @@ const isAuthenticated = (req, res, next) => {
         return res.status(401).json({ message: 'Acceso no autorizado. Por favor, inicie sesión.' });
     }
     next();
-};
-
-/**
- * @function verifyRecaptcha
- * @description Middleware para verificar un token de Google reCAPTCHA v2.
- * Realiza una petición server-to-server a la API de Google para validar la respuesta del usuario.
- * @param {import('express').Request} req - Objeto de la petición de Express.
- * @param {import('express').Response} res - Objeto de la respuesta de Express.
- * @param {import('express').NextFunction} next - Función callback para pasar al siguiente middleware.
- */
-const verifyRecaptcha = async (req, res, next) => {
-    try {
-        const token = req.body['g-recaptcha-response'];
-        if (!token) {
-            return res.status(400).json({ message: 'Por favor, completa la verificación reCAPTCHA.' });
-        }
-        
-        const secretKey = process.env.RECAPTCHA_SECRET_KEY;
-        const verificationUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${secretKey}&response=${token}&remoteip=${req.ip}`;
-
-        const response = await axios.post(verificationUrl);
-        const { success } = response.data;
-
-        if (success) {
-            next();
-        } else {
-            return res.status(401).json({ message: 'Fallo en la verificación reCAPTCHA. Inténtalo de nuevo.' });
-        }
-    } catch (error) {
-        console.error('Error en el middleware verifyRecaptcha:', error);
-        return res.status(500).json({ message: 'Error del servidor al validar el reCAPTCHA.' });
-    }
 };
 
 
@@ -362,7 +361,7 @@ const LOCKOUT_TIME = 24 * 60 * 60 * 1000; // 24 horas de bloqueo.
  * @returns {object} 403 - IP bloqueada o cuenta eliminada.
  * @returns {object} 500 - Error del servidor.
  */
-app.post('/login', sensitiveRouteLimiter, verifyRecaptcha, async (req, res) => {
+app.post('/login', sensitiveRouteLimiter, verifyTurnstile, async (req, res) => {
     const { loginIdentifier, password } = req.body;
     const ip = req.ip;
 
@@ -452,9 +451,7 @@ app.post('/login', sensitiveRouteLimiter, verifyRecaptcha, async (req, res) => {
 app.post('/register',
     // El limitador de peticiones se aplica ANTES de procesar el archivo para prevenir DoS.
     sensitiveRouteLimiter,
-    // El middleware de reCAPTCHA se aplica ANTES de procesar el archivo.
-    verifyRecaptcha,
-    // Middleware de Multer para manejar la subida del archivo.
+    // Middleware de Multer para manejar la subida del archivo. Lo ponemos ANTES de Turnstile para parsear el form-data.
     (req, res, next) => {
         upload.single('profilePicture')(req, res, (err) => {
             if (err instanceof multer.MulterError) {
@@ -468,6 +465,8 @@ app.post('/register',
             next();
         });
     },
+    // El middleware de Turnstile se aplica DESPUÉS de multer.
+    verifyTurnstile,
     // Controlador principal de la ruta.
     async (req, res) => {
 
