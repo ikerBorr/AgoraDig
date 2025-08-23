@@ -100,6 +100,13 @@ function initLoginForm() {
                     generalMessageDiv.className = 'message-error';
                     generalMessageDiv.textContent = result.message;
                 }
+                
+                // Resetea el widget de Turnstile para obtener un nuevo token en el próximo intento.
+                const turnstileWidget = loginForm.querySelector('.cf-turnstile');
+                if (turnstileWidget && typeof turnstile !== 'undefined') {
+                    turnstile.reset(turnstileWidget);
+                }
+                
                 submitButton.disabled = false; // Reactiva el botón para un nuevo intento.
             }
         } catch (error) {
@@ -109,6 +116,13 @@ function initLoginForm() {
                 generalMessageDiv.className = 'message-error';
                 generalMessageDiv.textContent = 'Error de conexión. Inténtalo de nuevo.';
             }
+
+            // Resetea el widget de Turnstile también en caso de error de red.
+            const turnstileWidget = loginForm.querySelector('.cf-turnstile');
+            if (turnstileWidget && typeof turnstile !== 'undefined') {
+                turnstile.reset(turnstileWidget);
+            }
+
             submitButton.disabled = false;
         }
     });
