@@ -1,136 +1,202 @@
 /**
  * @file profile.css
- * @description Estilos para la página de perfil de usuario.
+ * @description Estilos para la página de perfil de usuario, incluyendo tarjeta de perfil, modales con diseño original y panel de moderación.
  */
 
-/* Contenedor principal de la sección de perfil de usuario */
+/* =================================================================
+   ESTILOS DE LA TARJETA DE PERFIL
+   ================================================================= */
+
 #user-profile {
-  /* Asegura que el contenedor ocupe un ancho razonable en la pantalla */
   max-width: 600px;
   width: 90%;
-  /* Añade un espacio vertical arriba y abajo del perfil */
-  margin-top: 40px;
-  margin-bottom: 40px;
+  margin: 40px auto;
 }
 
-/* Tarjeta que envuelve todo el contenido del perfil */
 .profile-card {
-  /* Espaciado interno generoso para que el contenido no toque los bordes */
   padding: 40px;
-  /* Utiliza variables de color definidas en el tema para consistencia */
-  background-color: var(--color-boton-fondo);
+  background-color: var(--color-fondo-tarjeta);
   border-radius: 12px;
-  /* Sombra sutil para dar profundidad a la tarjeta */
   box-shadow: 0 5px 20px hsla(var(--tono-neutro), var(--saturacion-neutra), 0%, 0.1);
-  /* Borde fino que también usa los colores del tema */
-  border: 1px solid hsla(var(--tono-neutro), var(--saturacion-neutra), 50%, 0.2);
-  /* El HTML ya incluye la clase 'center-text', por lo que el texto está alineado */
+  border: 1px solid var(--color-borde);
 }
 
-/* Estilo para la imagen de perfil del usuario */
 .profile-picture {
-  /* --- Dimensiones y forma --- */
   width: 150px;
   height: 150px;
-  /* Convierte la imagen cuadrada en un círculo perfecto */
   border-radius: 50%;
-  /* Evita que la imagen se estire o deforme si no es cuadrada */
-  object-fit: cover;  
-  
-  /* --- Centrado y borde --- */
-  /* display: block y margin: auto centran la imagen horizontalmente */
+  object-fit: cover;
   display: block;
-  margin: 0 auto 20px; /* Centra y añade espacio inferior */
-  /* Borde decorativo que utiliza el color de enlace del tema */
+  margin: 0 auto 20px;
   border: 3px solid var(--color-enlace);
-  /* Sombra de color sutil para destacar la foto */
   box-shadow: 0 0 15px hsla(var(--tono-primario), var(--saturacion-primaria), 50%, 0.3);
 }
 
-/* Estilo para el nombre completo del usuario (h1) */
 .profile-fullname {
-  /* El h1 ya tiene estilos base, solo ajustamos el margen inferior para acercarlo al username */
   margin-bottom: 0.25rem;
-  /* Tamaño de fuente fluido, consistente con la definición en base.css */
   font-size: clamp(1.75rem, 1rem + 4vw, 2.441rem);
 }
 
-/* Estilo para el nombre de usuario (@usuario) */
 .profile-username {
-  /* Tamaño de fuente fluido y un color de texto más suave */
   font-size: clamp(1.1rem, 1rem + 1vw, 1.25rem);
-  color: hsl(var(--tono-neutro), var(--saturacion-neutra), 45%);
-  /* Elimina el margen superior y añade espacio inferior */
+  color: var(--color-texto-secundario);
   margin-top: 0;
   margin-bottom: 25px;
 }
 
-/* Párrafo con la descripción o biografía del usuario */
 .profile-description {
-  /* Mejora la legibilidad con un interlineado mayor */
   line-height: 1.7;
   font-size: 1.05em;
-  /* Limita el ancho para que las líneas de texto no sean demasiado largas */
   max-width: 90%; 
-  /* Centra el bloque de texto */
   margin-left: auto;
   margin-right: auto;
   margin-bottom: 30px;
   white-space: pre-wrap;
 }
 
-/* Contenedor para metadatos, como la fecha de registro */
 .profile-meta {
-  /* Espaciado superior y una línea divisoria para separarlo de la descripción */
   margin-top: 30px;
   padding-top: 20px;
-  border-top: 1px solid hsla(var(--tono-neutro), var(--saturacion-neutra), 50%, 0.2);
-  /* Texto más pequeño y de un color suave para darle una importancia secundaria */
+  border-top: 1px solid var(--color-borde);
   font-size: 0.9em;
-  color: hsl(var(--tono-neutro), var(--saturacion-neutra), 50%);
+  color: var(--color-texto-secundario);
 }
 
-/* Botón para cerrar sesión */
+.profile-actions {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 30px;
+    flex-wrap: wrap;
+}
+
 #logout-button {
-  /* --- Colores y Apariencia --- */
-  background-color: hsl(0, 80%, 60%); 
-  border: 1px solid hsl(0, 70%, 45%);     
-  color: #FFFFFF;                     
-
-  /* --- Diseño y Espaciado --- */
-  display: inline-flex;       
-  align-items: center;        
-  gap: 8px;                   
-  margin-top: 25px;           
-  padding: 10px 20px;         
-  
-  /* --- Tipografía y Comportamiento --- */
-  font-weight: bold;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background-color 0.2s ease, border-color 0.2s ease; 
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
 }
 
-#logout-button:hover {
-  background-color: hsl(0, 80%, 55%); 
-  border-color: hsl(0, 70%, 40%);
+.button-link-danger {
+    background: none;
+    border: none;
+    color: #c0392b;
+    cursor: pointer;
+    text-decoration: underline;
+    font-size: 0.9em;
+    padding: 0.5rem;
 }
 
-#logout-button svg {
-  stroke: currentColor; 
+.button-link-danger:hover {
+    color: #e74c3c;
 }
 
 /* =================================================================
-   ESTILOS PARA EL MODAL DE EDICIÓN DE PERFIL
+   ESTILOS ORIGINALES PARA MODALES DE PERFIL (RESTAURADOS)
    ================================================================= */
 
-.modal-content {
-    max-width: 500px;
+.profile-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
+.profile-modal-overlay:not(.hidden) {
+    opacity: 1;
+    visibility: visible;
+}
+
+.profile-modal-content {
+    background-color: var(--color-fondo);
+    padding: 2rem;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+    position: relative;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    transform: scale(0.95);
+    transition: transform 0.3s ease;
+}
+
+.profile-modal-overlay:not(.hidden) .profile-modal-content {
+    transform: scale(1);
+}
+
+.profile-modal-close-button {
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    background: none;
+    border: none;
+    font-size: 2rem;
+    color: var(--color-texto-secundario);
+    cursor: pointer;
+    line-height: 1;
+}
+
+.profile-modal-close-button:hover {
+    color: var(--color-texto);
+}
+
+.profile-modal-content h2 {
+    text-align: center;
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+}
+
+.profile-modal-form-group {
+    margin-bottom: 1.25rem;
+}
+
+.profile-modal-form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+
+.profile-modal-form-group input[type="text"],
+.profile-modal-form-group input[type="file"],
+.profile-modal-form-group textarea {
+    width: 100%;
+    padding: 0.75rem;
+    font-size: 1rem;
+    box-sizing: border-box;
+    border: 1px solid var(--color-borde);
+    background-color: var(--color-fondo-input);
+    color: var(--color-texto-input);
+    border-radius: 4px;
+}
+
+.profile-modal-error-text {
+    color: #e74c3c;
+    text-align: center;
+    margin-bottom: 1rem;
+    font-weight: bold;
+}
+
+.profile-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.profile-actions button.button-primary {
+    flex-grow: 1;
+}
 
 /* =================================================================
-   ESTILOS PARA EL PANEL DE ADMINISTRACIÓN Y MODERACIÓN
+   ESTILOS PARA EL PANEL DE ADMINISTRACIÓN Y MODERACIÓN (RESTAURADOS)
    ================================================================= */
 
 .moderation-details {
@@ -139,6 +205,7 @@
     justify-content: center;
     gap: 0.75rem;
     margin-top: 0.5rem;
+    text-align: center;
 }
 
 .role-badge, .status-badge, .strikes-badge {
@@ -148,6 +215,7 @@
     border-radius: 15px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    border: 1px solid rgba(0,0,0,0.2);
 }
 
 .role-badge { background-color: hsla(var(--tono-primario), var(--saturacion-primaria), 45%, 0.8); color: white; }
@@ -158,7 +226,7 @@
 .admin-form-wrapper {
     margin-top: 30px;
     padding-top: 20px;
-    border-top: 1px solid hsla(var(--tono-neutro), var(--saturacion-neutra), 50%, 0.2);
+    border-top: 1px solid var(--color-borde);
 }
 
 .admin-form-wrapper h3 {
@@ -166,6 +234,7 @@
     margin-bottom: 20px;
     font-size: 1.5rem;
     color: var(--color-texto);
+    text-align: center;
 }
 
 #admin-edit-form {
@@ -211,19 +280,6 @@
 
 #admin-edit-form button[type="submit"] {
     margin-top: 10px;
-    background-color: var(--color-enlace);
-    color: hsl(var(--tono-primario), 15%, 95%);
-    border: none;
-    font-weight: bold;
-    padding: 12px;
-    font-size: 1em;
-    transition: transform 0.2s, background-color 0.2s;
-    cursor: pointer;
-}
-
-#admin-edit-form button[type="submit"]:hover {
-    background-color: hsl(var(--tono-primario), var(--saturacion-primaria), 55%);
-    transform: translateY(-2px);
 }
 
 #admin-form-message {
@@ -231,12 +287,15 @@
     font-weight: bold;
     padding: 0.5rem;
     border-radius: 4px;
+    margin-top: 0.5rem;
 }
-.message-info.success-text {
+
+#admin-form-message.success-text {
     background-color: hsl(130, 70%, 90%);
     color: hsl(130, 70%, 20%);
 }
-.message-info.error-text {
+
+#admin-form-message.error-text {
     background-color: hsl(0, 80%, 92%);
     color: hsl(0, 60%, 40%);
 }
