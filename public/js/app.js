@@ -20,6 +20,33 @@ const loaderContainer = document.getElementById('loader-container');
 // ===================================
 
 /**
+ * @function loadViewCss
+ * @description Carga dinámicamente una hoja de estilos para una vista específica.
+ * Elimina el CSS de la vista anterior para evitar conflictos de estilos.
+ * @param {string|null} cssPath - La ruta al archivo CSS a cargar, o null para no cargar ninguno.
+ */
+async function loadViewCss(cssPath) {
+    // Elimina la hoja de estilos de la vista anterior, si existe.
+    const oldLink = document.getElementById('view-specific-css');
+    if (oldLink) {
+        oldLink.remove();
+    }
+
+    // Si se proporciona una nueva ruta de CSS, crea y añade la nueva etiqueta <link>.
+    if (cssPath) {
+        return new Promise((resolve) => {
+            const link = document.createElement('link');
+            link.id = 'view-specific-css';
+            link.rel = 'stylesheet';
+            link.href = cssPath;
+            link.onload = () => resolve(); // Resuelve la promesa cuando el CSS ha cargado.
+            document.head.appendChild(link);
+        });
+    }
+}
+
+
+/**
  * @function createMessageCard
  * @description Crea y devuelve un elemento del DOM que representa una tarjeta de mensaje.
  * Esta función desacopla la lógica de creación de la tarjeta del renderizado principal del feed.
@@ -417,6 +444,7 @@ async function fetchTemplate(path) {
     } catch (error) {
         console.error('Error al cargar la plantilla:', error);
         const response = await fetch('/templates/error-404.html');
+        await loadViewCss('/css/error.css'); // Cargar CSS de error si la plantilla principal falla
         return await response.text();
     }
 }
@@ -482,6 +510,7 @@ async function renderPage(path) {
     }
 
     let templatePath = '';
+    let cssPath = null; // Variable para almacenar la ruta del CSS específico de la vista.
 
     // Función de ayuda para verificar la autenticación, ahora en un ámbito superior para ser reutilizable.
     async function checkAuth() {
@@ -506,6 +535,9 @@ async function renderPage(path) {
     }
     
     if (pathname === '/' || pathname === '/home') {
+        cssPath = '/css/messages.css';
+        await loadViewCss(cssPath);
+
         appRoot.innerHTML = await fetchTemplate('/templates/home.html');
         document.title = 'Inicio';
         
@@ -692,6 +724,9 @@ async function renderPage(path) {
         templatePath = '';
 
     } else if (pathname.startsWith('/messages/')) {
+        cssPath = '/css/messages.css';
+        await loadViewCss(cssPath);
+
         try {
             const messageId = pathname.split('/')[2];
             if (!messageId) throw new Error('ID de mensaje no válido.');
@@ -868,6 +903,8 @@ async function renderPage(path) {
 
         } catch (error) {
             console.error('Error al renderizar el detalle del mensaje:', error);
+            cssPath = '/css/error.css';
+            await loadViewCss(cssPath);
             appRoot.innerHTML = await fetchTemplate('/templates/error-404.html');
             const errorElement = document.getElementById('error-message-content');
             if(errorElement) errorElement.textContent = error.message;
@@ -878,20 +915,29 @@ async function renderPage(path) {
     } else if (pathname === '/about' || pathname === '/about-AgoraDig' || pathname === '/about-us') {
         templatePath = '/templates/about.html';
         document.title = 'Acerca de';
+        await loadViewCss(null);
     } else if (pathname === '/contact' || pathname === '/contact-us') {
         templatePath = '/templates/contact.html';
         document.title = 'Contacto';
+        await loadViewCss(null);
     } else if (pathname === '/register') {
         templatePath = '/templates/register.html';
         document.title = 'Crear Cuenta';
+        cssPath = '/css/forms.css';
+        await loadViewCss(cssPath);
     } else if (pathname === '/register-success') {
         templatePath = '/templates/register-success.html';
         document.title = 'Registro Exitoso';
+        await loadViewCss(null);
     } else if (pathname === '/login') {
         templatePath = '/templates/login.html';
         document.title = 'Iniciar Sesión';
+        cssPath = '/css/forms.css';
+        await loadViewCss(cssPath);
     
     } else if (path.startsWith('/view-profile')) {
+        cssPath = '/css/profile.css';
+        await loadViewCss(cssPath);
         try {
             const params = new URLSearchParams(window.location.search);
             const username = params.get('username');
@@ -915,6 +961,7 @@ async function renderPage(path) {
             if (!userResponse.ok) {
                 const errorData = await userResponse.json();
                 if (userResponse.status === 410) {
+                    await loadViewCss('/css/error.css');
                     appRoot.innerHTML = await fetchTemplate('/templates/error-410.html');
                     document.title = 'ERROR 410';
                     templatePath = '';
@@ -1039,11 +1086,14 @@ async function renderPage(path) {
 
         } catch (error) {
             console.error('Error al renderizar el perfil de usuario:', error);
+            await loadViewCss('/css/error.css');
             appRoot.innerHTML = await fetchTemplate('/templates/error-404.html');
             document.title = 'ERROR 404';
         }
     
     } else if (path.startsWith('/profile')) {
+        cssPath = '/css/profile.css';
+        await loadViewCss(cssPath);
         try {
             const response = await fetch('/api/profile');
             if (!response.ok) {
@@ -1088,6 +1138,7 @@ async function renderPage(path) {
     
         } catch (error) {
             console.error(error);
+            await loadViewCss('/css/error.css');
             appRoot.innerHTML = await fetchTemplate('/templates/error-404.html');
             document.title = 'ERROR 404';
         }
@@ -1095,13 +1146,17 @@ async function renderPage(path) {
     } else if (pathname === '/terms-and-conditions') {
         templatePath = '/templates/terms-and-conditions.html';
         document.title = 'Términos y Condiciones';
+        await loadViewCss(null);
     } else if (pathname === '/privacy-policy') {
         templatePath = '/templates/privacy-policy.html';
         document.title = 'Política de Privacidad';
+        await loadViewCss(null);
 
     } else {
         templatePath = '/templates/error-404.html';
         document.title = 'ERROR 404';
+        cssPath = '/css/error.css';
+        await loadViewCss(cssPath);
     }
 
     if (templatePath) {

@@ -81,3 +81,166 @@ button {
 .hidden {
     display: none !important;
 }
+
+/* ==========================================================================
+   # Estilos Genéricos para Modales
+   ========================================================================== */
+
+.modal-overlay,
+.delete-confirmation-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+    padding: 1rem;
+}
+
+.modal-overlay:not(.hidden),
+.delete-confirmation-overlay.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+.modal-content {
+    background-color: var(--color-fondo);
+    padding: 2rem;
+    border-radius: 8px;
+    width: 90vw;
+    max-width: 700px;
+    position: relative;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    transform: translateY(-50px);
+    transition: transform 0.3s ease;
+}
+
+.modal-overlay:not(.hidden) .modal-content {
+    transform: translateY(0);
+}
+
+.close-button {
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    background: none;
+    border: none;
+    font-size: 2rem;
+    color: var(--color-texto-secundario);
+    cursor: pointer;
+    line-height: 1;
+}
+
+.close-button:hover {
+    color: var(--color-texto);
+}
+
+.modal-content h2 {
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+    text-align: center;
+    font-size: 1.8rem;
+    color: var(--color-texto);
+}
+
+/* --- Formulario Dentro del Modal --- */
+.form-group {
+    margin-bottom: 1.25rem;
+    text-align: left;
+}
+
+label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--color-texto);
+}
+
+input[type="text"],
+textarea {
+    width: 100%;
+    padding: 0.75rem;
+    font-size: 1rem;
+    box-sizing: border-box;
+    border-radius: 4px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    background-color: var(--color-fondo-input);
+    color: var(--color-texto-input);
+    border: 1px solid var(--color-borde);
+}
+
+input[type="text"]:focus,
+textarea:focus {
+    outline: none;
+    border-color: var(--color-enlace);
+    box-shadow: 0 0 0 3px var(--color-foco-primario);
+}
+
+textarea {
+    resize: vertical;
+    min-height: 120px;
+}
+
+#create-message-form button[type="submit"] {
+    width: 100%;
+    margin-top: 1rem;
+}
+
+/* --- Mensajes de Error en el Modal --- */
+#modal-error-message, .profile-modal-error-text {
+    text-align: center;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    color: #e74c3c;
+}
+
+/* --- Estilos para Botones de Modales --- */
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.button-secondary, .button-danger {
+    padding: 0.6rem 1.2rem;
+    border: 1px solid transparent;
+    font-weight: bold;
+    border-radius: 5px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.button-secondary {
+    background-color: var(--color-fondo-tarjeta);
+    border-color: var(--color-borde);
+    color: var(--color-texto);
+}
+
+.button-secondary:hover {
+    background-color: var(--color-fondo-hover);
+}
+
+.button-danger {
+    background-color: #c0392b;
+    color: #fff;
+}
+
+.button-danger:hover {
+    background-color: #e74c3c;
+}
+
+/* ==========================================================================
+   # Estilos del Modal de Confirmación de Borrado
+   ========================================================================== */
+
+.delete-confirmation-overlay .modal-content {
+    transform: none; /* Mantiene la anulación de la animación específica */
+    transition: none;
+}
