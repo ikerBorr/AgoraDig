@@ -297,7 +297,7 @@ function showReplyModal(parentId) {
             <button id="close-modal-btn" class="close-button" title="Cerrar">&times;</button>
         </div>
         <div class="modal-body">
-            <form id="dynamic-reply-form" novalidate>
+            <form id="create-message-form" novalidate>
                 <div class="form-group">
                     <label for="message-title">Título</label>
                     <input type="text" id="message-title" name="title" required minlength="3" maxlength="100">
@@ -336,7 +336,7 @@ function showReplyModal(parentId) {
         }
     });
 
-    const form = modalContent.querySelector('#dynamic-reply-form');
+    const form = modalContent.querySelector('form');
     const errorEl = modalContent.querySelector('#modal-error-message');
     
     form.addEventListener('submit', async (e) => {
