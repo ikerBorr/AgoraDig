@@ -613,15 +613,12 @@ async function renderPage(path) {
         const closeModalBtn = document.getElementById('close-modal-btn');
         const messageForm = document.getElementById('create-message-form');
         const modalError = document.getElementById('modal-error-message');
-        const modalTitle = document.getElementById('modal-title');
 
         const showModal = () => modalOverlay.classList.remove('hidden');
         const hideModal = () => {
             modalOverlay.classList.add('hidden');
             modalError.classList.add('hidden');
             messageForm.reset();
-            messageForm.removeAttribute('data-parent-id');
-            if(modalTitle) modalTitle.textContent = 'Crear un Nuevo Mensaje';
         };
         
         const checkAuthAndShowModal = async () => {
@@ -644,8 +641,7 @@ async function renderPage(path) {
             const formData = new FormData(messageForm);
             const data = Object.fromEntries(formData.entries());
             
-            const parentId = messageForm.getAttribute('data-parent-id');
-            const url = parentId ? `/api/messages/${parentId}/reply` : '/api/messages';
+            const url = '/api/messages';
 
             try {
                 const response = await fetch(url, {
@@ -674,11 +670,12 @@ async function renderPage(path) {
             const deleteButton = event.target.closest('.delete-message-btn');
 
             if (replyButton) {
-                const card = replyButton.closest('.message-card');
-                const messageId = card.getAttribute('data-message-id');
-                messageForm.setAttribute('data-parent-id', messageId);
-                if(modalTitle) modalTitle.textContent = 'Responder al Mensaje';
-                await checkAuthAndShowModal();
+                const isAuthenticated = await checkAuth();
+                if (isAuthenticated) {
+                    const card = replyButton.closest('.message-card');
+                    const messageId = card.getAttribute('data-message-id');
+                    showReplyModal(messageId);
+                }
                 return;
             }
             
