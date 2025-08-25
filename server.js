@@ -68,13 +68,35 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Medida de seguridad crítica: la aplicación no debe iniciar sin los secretos requeridos.
-if (!process.env.SESSION_SECRET || !process.env.TURNSTILE_SECRET_KEY) {
-    console.error('FATAL ERROR: Las variables de entorno SESSION_SECRET o TURNSTILE_SECRET_KEY no están definidas.');
+if (!process.env.SESSION_SECRET || !process.env.TURNSTILE_SECRET_KEY || !process.env.MONGODB_URI_USERS || !process.env.MONGODB_URI_MESSAGES) {
+    console.error('FATAL ERROR: Una o más variables de entorno críticas (SESSION_SECRET, TURNSTILE_SECRET_KEY, MONGODB_URI_USERS, MONGODB_URI_MESSAGES) no están definidas.');
     process.exit(1); // Termina el proceso si la configuración esencial falta.
 }
 
 // Confía en el primer proxy. Necesario si la app corre detrás de un reverse proxy (ej. Nginx, Heroku).
 app.set('trust proxy', 1);
+
+
+// =================================================================
+//  BD CONNECTIONS
+// =================================================================
+
+// Deshabilitar la opción strictQuery globalmente para Mongoose
+mongoose.set('strictQuery', false);
+
+// Crear dos conexiones de base de datos separadas
+const usersDbConnection = mongoose.createConnection(process.env.MONGODB_URI_USERS);
+const messagesDbConnection = mongoose.createConnection(process.env.MONGODB_URI_MESSAGES);
+
+// Manejadores de eventos para las conexiones
+usersDbConnection.on('connected', () => console.log('✅ Conexión a MongoDB (Users & Sessions) realizada'));
+usersDbConnection.on('error', err => console.error('❌ Error de conexión a MongoDB (Users & Sessions):', err));
+
+messagesDbConnection.on('connected', () => console.log('✅ Conexión a MongoDB (Messages) realizada'));
+messagesDbConnection.on('error', err => console.error('❌ Error de conexión a MongoDB (Messages):', err));
+
+// Crear una promesa que resuelva con el cliente nativo para la tienda de sesiones
+const usersDbClientPromise = usersDbConnection.asPromise().then(connection => connection.getClient());
 
 
 // =================================================================
@@ -97,14 +119,12 @@ app.use(express.json());
 // Sirve estáticamente los archivos subidos (fotos de perfil).
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-const mongoUrl = process.env.MONGODB_URI || 'mongodb://localhost:27017/AgoraDig_BD';
-
 // Configuración de la sesión de usuario, almacenada en MongoDB para persistencia.
 app.use(session({
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false, // No crear sesiones hasta que algo se almacene.
-    store: MongoStore.create({ mongoUrl: mongoUrl }),
+    store: MongoStore.create({ clientPromise: usersDbClientPromise }),
     cookie: {
         maxAge: 1000 * 60 * 60 * 24 * 14, // Duración de la cookie: 14 días.
         secure: process.env.NODE_ENV === 'production', // Usar cookies seguras solo en producción (HTTPS).
@@ -240,14 +260,6 @@ const isAuthenticated = (req, res, next) => {
 
 
 // =================================================================
-//  BD CONNECTION
-// =================================================================
-mongoose.connect(mongoUrl)
-    .then(() => console.log('✅ Conexión a MongoDB realizada'))
-    .catch(err => console.error('❌ Error de conexión a MongoDB:', err));
-
-
-// =================================================================
 //  MODELS AND SCHEMAS
 // =================================================================
 
@@ -276,7 +288,7 @@ const userSchema = new mongoose.Schema({
     timestamps: true,
 });
 
-const User = mongoose.model('User', userSchema);
+const User = usersDbConnection.model('User', userSchema);
 
 /**
  * @description Esquema para rastrear intentos de inicio de sesión fallidos por IP e identificador.
@@ -287,11 +299,11 @@ const loginAttemptSchema = new mongoose.Schema({
     loginIdentifier: { type: String, required: true, lowercase: true },
     attempts: { type: Number, required: true, default: 0 },
     lockoutUntil: { type: Date },
-    createdAt: { type: Date, default: Date.now, expires: '24h' } // TTL: El documento se elimina 24h después de su creación.
+    createdAt: { type: Date, default: Date.now, expires: '16h' } // TTL: El documento se elimina 16h después de su creación.
 });
 // Índice compuesto para optimizar la búsqueda de intentos de login.
 loginAttemptSchema.index({ ip: 1, loginIdentifier: 1 });
-const LoginAttempt = mongoose.model('LoginAttempt', loginAttemptSchema);
+const LoginAttempt = usersDbConnection.model('LoginAttempt', loginAttemptSchema);
 
 
 /**
@@ -347,7 +359,7 @@ messageSchema.virtual('likeCount').get(function() { return this.likes.length; })
  */
 messageSchema.virtual('replyCount').get(function() { return this.replies.length; });
 
-const Message = mongoose.model('Message', messageSchema);
+const Message = messagesDbConnection.model('Message', messageSchema);
 
 
 // =================================================================
@@ -384,7 +396,7 @@ app.post('/login', sensitiveRouteLimiter, verifyTurnstile, async (req, res) => {
 
         const identifier = loginIdentifier.toLowerCase();
         
-        // 1. Comprobar el estado de intentos para la combinación IP/identificador.
+        // 1. Comprobar si la IP/identificador ya está bloqueada.
         const loginAttempt = await LoginAttempt.findOne({ ip, loginIdentifier: identifier });
 
         if (loginAttempt && loginAttempt.lockoutUntil && loginAttempt.lockoutUntil > Date.now()) {
@@ -438,9 +450,7 @@ app.post('/login', sensitiveRouteLimiter, verifyTurnstile, async (req, res) => {
         }
         
         // 4. Si el login es exitoso, limpiar el registro de intentos y crear la sesión.
-        if (loginAttempt) {
-            await loginAttempt.deleteOne();
-        }
+        await LoginAttempt.deleteOne({ ip, loginIdentifier: identifier });
 
         req.session.userId = user._id;
         res.status(200).json({ message: 'Inicio de sesión exitoso.' });
@@ -904,7 +914,11 @@ app.get('/api/messages', apiLimiter, async (req, res) => {
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit)
-            .populate('sender', 'username profilePicturePath')
+            .populate({
+                path: 'sender',
+                model: User,
+                select: 'username profilePicturePath'
+            })
             .populate('referencedMessage', 'title _id messageStatus')
             .lean({ virtuals: true });
 
@@ -988,7 +1002,11 @@ app.post('/api/messages', actionLimiter, isAuthenticated, async (req, res) => {
 
         await newMessage.save();
 
-        const populatedMessage = await newMessage.populate('sender', 'username profilePicturePath');
+        const populatedMessage = await newMessage.populate({
+            path: 'sender',
+            model: User,
+            select: 'username profilePicturePath'
+        });
 
         const responseMessage = populatedMessage.toObject();
         responseMessage.sender.profilePicturePath = getValidProfilePicturePath(responseMessage.sender.profilePicturePath);
@@ -1057,7 +1075,11 @@ app.post('/api/messages/:id/reply', actionLimiter, isAuthenticated, async (req, 
         await Message.updateOne({ _id: parentMessageId }, { $push: { replies: newReply._id } });
 
         // Poblar y devolver la respuesta
-        const populatedReply = await newReply.populate('sender', 'username profilePicturePath');
+        const populatedReply = await newReply.populate({
+            path: 'sender',
+            model: User,
+            select: 'username profilePicturePath'
+        });
         const responseMessage = populatedReply.toObject();
         responseMessage.sender.profilePicturePath = getValidProfilePicturePath(responseMessage.sender.profilePicturePath);
         
@@ -1242,7 +1264,11 @@ app.get('/api/messages/:id', apiLimiter, async (req, res) => {
         }
         
         const message = await Message.findOne({ _id: messageId, messageStatus: 'active' })
-            .populate('sender', 'username profilePicturePath')
+            .populate({
+                path: 'sender',
+                model: User,
+                select: 'username profilePicturePath'
+            })
             .populate('referencedMessage', 'title _id messageStatus')
             .lean({ virtuals: true });
 
@@ -1301,7 +1327,11 @@ app.get('/api/messages/:id/replies', apiLimiter, async (req, res) => {
                 '_id': { $in: replyIdsOnPage },
                 'messageStatus': 'active'
             })
-            .populate('sender', 'username profilePicturePath')
+            .populate({
+                path: 'sender',
+                model: User,
+                select: 'username profilePicturePath'
+            })
             .populate('referencedMessage', 'title _id messageStatus')
             .sort({ createdAt: 'asc' })
             .lean({ virtuals: true });
