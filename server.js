@@ -579,7 +579,7 @@ app.post('/register',
         const newPath = path.join(__dirname, 'uploads', newFileName);
 
         await sharp(tempFile.path)
-            .resize(500, 500, { fit: 'cover' })
+            .resize(400, 400, { fit: 'cover' })
             .webp({ quality: 80 })
             .toFile(newPath);
 
@@ -773,7 +773,7 @@ app.patch('/api/profile',
                 const newFileName = `${userId}.webp`;
                 const newPath = path.join(__dirname, 'uploads', newFileName);
                 await sharp(tempFile.path)
-                    .resize(500, 500, { fit: 'cover' })
+                    .resize(400, 400, { fit: 'cover' })
                     .webp({ quality: 80 })
                     .toFile(newPath);
 
