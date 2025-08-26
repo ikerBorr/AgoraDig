@@ -334,7 +334,8 @@ const messageSchema = new mongoose.Schema({
     likes: { type: [mongoose.Schema.Types.ObjectId], ref: 'User', default: [] },
     replies: { type: [mongoose.Schema.Types.ObjectId], ref: 'Message', default: [] },
     messageStatus: { type: String, enum: ['active', 'deleted', 'deletedByModerator', 'deletedByAdmin'], default: 'active', index: true },
-    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    reportedBy: { type: [mongoose.Schema.Types.ObjectId], ref: 'User', default: [] }
 }, {
     timestamps: true,
     toJSON: { virtuals: true }, 
@@ -850,8 +851,9 @@ app.delete('/api/profile', actionLimiter, isAuthenticated, async (req, res) => {
             return res.status(409).json({ message: 'Fallo al eliminar cuenta. Has eliminado otra cuenta hace poco' });
         }
         
-        // 1. Eliminar todos los 'likes' dados por este usuario.
+        // 1. Eliminar todos los 'likes' y reportes dados por este usuario.
         await Message.updateMany({ likes: userId }, { $pull: { likes: userId } });
+        await Message.updateMany({ reportedBy: userId }, { $pull: { reportedBy: userId } });
 
         // 2. Eliminar la foto de perfil del sistema de archivos.
         const picturePath = user.profilePicturePath;
@@ -931,9 +933,10 @@ app.get('/api/messages', apiLimiter, async (req, res) => {
                     profilePicturePath: DEFAULT_AVATAR_PATH
                 };
             }
-            const isLiked = req.session.userId ? message.likes.some(like => like.toString() === req.session.userId.toString()) : false;
+            const isLiked = req.session.userId ? message.likes?.some(like => like.toString() === req.session.userId.toString()) || false : false;
+            const isReported = req.session.userId ? message.reportedBy?.some(reporterId => reporterId.toString() === req.session.userId.toString()) || false : false;
 
-            return { ...message, isLiked };
+            return { ...message, isLiked, isReported };
         });
 
         const totalMessages = await Message.countDocuments({ messageStatus: 'active' });
@@ -1208,6 +1211,49 @@ app.post('/api/messages/:id/like', actionLimiter, isAuthenticated, async (req, r
 });
 
 /**
+ * @route   POST /api/messages/:id/report
+ * @description Permite a un usuario autenticado reportar un mensaje.
+ * Un usuario no puede reportar su propio mensaje. La ID del reportante se añade al array `reportedBy`.
+ * @access  Private (requiere `isAuthenticated` middleware)
+ * @param {object} req.params - Parámetros de la ruta.
+ * @param {string} req.params.id - El ID del mensaje a reportar.
+ * @returns {object} 200 - Mensaje de éxito.
+ * @returns {object} 403 - Intento de reportar un mensaje propio.
+ * @returns {object} 404 - Mensaje no encontrado.
+ * @returns {object} 500 - Error del servidor.
+ */
+app.post('/api/messages/:id/report', actionLimiter, isAuthenticated, async (req, res) => {
+    try {
+        const messageId = req.params.id;
+        const userId = req.session.userId;
+
+        const message = await Message.findById(messageId);
+
+        if (!message) {
+            return res.status(404).json({ message: 'Mensaje no encontrado.' });
+        }
+
+        // Un usuario no puede reportar su propio mensaje.
+        if (message.sender.equals(userId)) {
+            return res.status(403).json({ message: 'No puedes reportar tus propios mensajes.' });
+        }
+
+        // Añade el ID del usuario al array de reportes, evitando duplicados.
+        await Message.findByIdAndUpdate(
+            messageId,
+            { $addToSet: { reportedBy: userId } },
+            { new: true }
+        );
+
+        res.status(200).json({ message: 'El mensaje ha sido reportado correctamente.' });
+
+    } catch (error) {
+        console.error(`Error en POST /api/messages/${req.params.id}/report:`, error);
+        res.status(500).json({ message: 'Error en el servidor al procesar el reporte.' });
+    }
+});
+
+/**
  * @route   GET /api/messages/counts
  * @description Obtiene los contadores de likes para una lista de IDs de mensajes.
  * Diseñado para ser usado por el frontend para actualizar los contadores mediante polling de manera eficiente.
@@ -1281,7 +1327,8 @@ app.get('/api/messages/:id', apiLimiter, async (req, res) => {
         } else {
             message.sender = { username: 'Usuario Eliminado', profilePicturePath: DEFAULT_AVATAR_PATH };
         }
-        message.isLiked = req.session.userId ? message.likes.some(like => like.toString() === req.session.userId.toString()) : false;
+        message.isLiked = req.session.userId ? message.likes?.some(like => like.toString() === req.session.userId.toString()) || false : false;
+        message.isReported = req.session.userId ? message.reportedBy?.some(reporterId => reporterId.toString() === req.session.userId.toString()) || false : false;
         
         res.status(200).json(message);
 
@@ -1342,7 +1389,8 @@ app.get('/api/messages/:id/replies', apiLimiter, async (req, res) => {
                 } else {
                     reply.sender = { username: 'Usuario Eliminado', profilePicturePath: DEFAULT_AVATAR_PATH };
                 }
-                reply.isLiked = req.session.userId ? reply.likes.some(like => like.toString() === req.session.userId.toString()) : false;
+                reply.isLiked = req.session.userId ? reply.likes?.some(like => like.toString() === req.session.userId.toString()) || false : false;
+                reply.isReported = req.session.userId ? reply.reportedBy?.some(reporterId => reporterId.toString() === req.session.userId.toString()) || false : false;
                 return reply;
             });
         }

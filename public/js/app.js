@@ -163,6 +163,25 @@ function createMessageCard(message, currentUser) {
     hashtagsSmall.innerHTML = formattedHashtags;
     cardFooter.appendChild(hashtagsSmall);
     
+    const footerActions = document.createElement('div');
+    footerActions.className = 'footer-actions';
+    
+    const canReport = currentUser && message.sender && currentUser._id !== message.sender._id;
+    if (canReport) {
+        const reportButton = document.createElement('button');
+        if (message.isReported) {
+            reportButton.className = 'report-message-btn button--icon';
+            reportButton.title = 'Ya has reportado este mensaje';
+            reportButton.disabled = true;
+            reportButton.innerHTML = 'Reportado';
+        } else {
+            reportButton.className = 'report-message-btn button--icon';
+            reportButton.title = 'Reportar mensaje';
+            reportButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-flag"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></svg>`;
+        }
+        footerActions.appendChild(reportButton);
+    }
+
     const canDelete = currentUser && (
         currentUser.role === 'admin' ||
         currentUser.role === 'moderator' ||
@@ -174,7 +193,11 @@ function createMessageCard(message, currentUser) {
         deleteButton.className = 'delete-message-btn';
         deleteButton.title = 'Eliminar mensaje';
         deleteButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-trash-2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`;
-        cardFooter.appendChild(deleteButton);
+        footerActions.appendChild(deleteButton);
+    }
+    
+    if (footerActions.hasChildNodes()) {
+        cardFooter.appendChild(footerActions);
     }
 
     card.appendChild(cardFooter);
@@ -273,6 +296,70 @@ function showDeleteConfirmationModal(messageId, cardElement) {
         if (e.target === modalOverlay) {
             closeModal();
         }
+    });
+}
+
+/**
+ * @function showReportConfirmationModal
+ * @description Muestra un modal de confirmación para reportar un mensaje.
+ * @param {string} messageId - El ID del mensaje a reportar.
+ * @param {HTMLElement} reportButtonElement - El elemento del botón de reporte para deshabilitarlo al éxito.
+ */
+function showReportConfirmationModal(messageId, reportButtonElement) {
+    if (document.querySelector('.delete-confirmation-overlay')) return;
+
+    const modalOverlay = document.createElement('div');
+    modalOverlay.className = 'delete-confirmation-overlay visible';
+
+    const modalContent = document.createElement('div');
+    modalContent.className = 'modal-content';
+    
+    modalContent.innerHTML = `
+        <h2 style="text-align: center;">Confirmar Reporte</h2>
+        <p>¿Estás seguro de que quieres reportar este mensaje para que sea revisado por un moderador?</p>
+        <div class="modal-error-message error-text hidden" style="text-align: center; margin-bottom: 1rem; font-weight: bold;"></div>
+        <div class="modal-actions">
+            <button class="button-secondary cancel-report-btn">Cancelar</button>
+            <button class="button-danger confirm-report-btn">Reportar</button>
+        </div>
+    `;
+
+    modalOverlay.appendChild(modalContent);
+    document.body.appendChild(modalOverlay);
+
+    const closeModal = () => {
+        if (modalOverlay) modalOverlay.remove();
+    };
+
+    const confirmBtn = modalContent.querySelector('.confirm-report-btn');
+    const cancelBtn = modalContent.querySelector('.cancel-report-btn');
+    const modalError = modalContent.querySelector('.modal-error-message');
+
+    confirmBtn.addEventListener('click', async () => {
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Reportando...';
+        try {
+            const response = await fetch(`/api/messages/${messageId}/report`, { method: 'POST' });
+            if (response.ok) {
+                closeModal();
+                reportButtonElement.disabled = true;
+                reportButtonElement.classList.add('reported');
+                reportButtonElement.innerHTML = 'Reportado';
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Error al reportar el mensaje.');
+            }
+        } catch (error) {
+            modalError.textContent = error.message;
+            modalError.classList.remove('hidden');
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = 'Reportar';
+        }
+    });
+
+    cancelBtn.addEventListener('click', closeModal);
+    modalOverlay.addEventListener('click', (e) => {
+        if (e.target === modalOverlay) closeModal();
     });
 }
 
@@ -668,6 +755,7 @@ async function renderPage(path) {
             const likeButton = event.target.closest('.like-button');
             const replyButton = event.target.closest('.reply-message-btn');
             const deleteButton = event.target.closest('.delete-message-btn');
+            const reportButton = event.target.closest('.report-message-btn');
 
             if (replyButton) {
                 const isAuthenticated = await checkAuth();
@@ -698,6 +786,16 @@ async function renderPage(path) {
                 }
                 return;
             }
+            
+            if (reportButton) {
+                 const isAuthenticated = await checkAuth();
+                 if(isAuthenticated){
+                    const card = reportButton.closest('.message-card');
+                    const messageId = card.getAttribute('data-message-id');
+                    showReportConfirmationModal(messageId, reportButton);
+                 }
+                return;
+            }
 
             if (deleteButton) {
                 const card = deleteButton.closest('.message-card');
@@ -709,7 +807,7 @@ async function renderPage(path) {
             const card = event.target.closest('.message-card');
             if (!card) return;
 
-            const isInteractiveClick = event.target.closest('a, button, .like-button, .reply-message-btn, .delete-message-btn');
+            const isInteractiveClick = event.target.closest('a, button, .like-button, .reply-message-btn, .delete-message-btn, .report-message-btn');
             if (!isInteractiveClick) {
                 const messageId = card.getAttribute('data-message-id');
                 const detailUrl = `/messages/${messageId}`;
@@ -843,6 +941,7 @@ async function renderPage(path) {
                      const likeButton = event.target.closest('.like-button');
                      const replyButton = event.target.closest('.reply-message-btn');
                      const deleteButton = event.target.closest('.delete-message-btn');
+                     const reportButton = event.target.closest('.report-message-btn');
             
                      if (likeButton) {
                          const isAuthenticated = await checkAuth();
@@ -863,6 +962,16 @@ async function renderPage(path) {
                          }
                          return;
                      }
+                     
+                    if (reportButton) {
+                        const isAuthenticated = await checkAuth();
+                        if (isAuthenticated) {
+                            const card = reportButton.closest('.message-card');
+                            const messageId = card.getAttribute('data-message-id');
+                            showReportConfirmationModal(messageId, reportButton);
+                        }
+                        return;
+                    }
 
                      if (deleteButton) {
                          const card = deleteButton.closest('.message-card');
@@ -884,7 +993,7 @@ async function renderPage(path) {
                     const card = event.target.closest('.message-card');
                     if (!card) return;
 
-                    const isInteractiveClick = event.target.closest('a, button, .like-button, .reply-message-btn, .delete-message-btn');
+                    const isInteractiveClick = event.target.closest('a, button, .like-button, .reply-message-btn, .delete-message-btn, .report-message-btn');
                     if (!isInteractiveClick) {
                         const messageIdToNav = card.getAttribute('data-message-id');
                         const currentMessageId = pathname.split('/')[2];
