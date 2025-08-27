@@ -62,7 +62,7 @@ function createMessageCard(message, currentUser) {
     card.id = `message-${message._id}`;
 
     // Se gestiona el caso de que el autor del mensaje haya sido eliminado.
-    const author = message.sender || { username: 'Usuario Eliminado', profilePicturePath: '/images/default-avatar.webp', _id: null };
+    const author = message.sender || { username: 'Usuario Eliminado', profilePicturePath: '/images/user_img/default-avatar.webp', _id: null };
     const { _id: authorId, username: authorUsername, profilePicturePath: authorAvatar } = author;
 
     // Se preparan los contadores y clases CSS.
@@ -1154,7 +1154,7 @@ async function renderPage(path) {
             
             const profilePic = appRoot.querySelector('.profile-picture');
             if (profilePic) {
-                profilePic.src = userData.profilePicturePath || '../images/default-avatar.webp';
+                profilePic.src = userData.profilePicturePath || '../images/user_img/default-avatar.webp';
                 profilePic.alt = `Foto de perfil de ${userData.username}`;
             }
             appRoot.querySelector('.profile-fullname').textContent = `${userData.firstName} ${userData.lastName}`;
@@ -1220,7 +1220,7 @@ async function renderPage(path) {
             
             const profilePicture = appRoot.querySelector('.profile-picture');
             if (profilePicture) {
-                profilePicture.src = userData.profilePicturePath || '../images/default-avatar.webp';
+                profilePicture.src = userData.profilePicturePath || '../images/user_img/default-avatar.webp';
                 profilePicture.alt = `Foto de perfil de ${userData.username}`;
             }
             appRoot.querySelector('.profile-fullname').textContent = `${userData.firstName} ${userData.lastName}`;

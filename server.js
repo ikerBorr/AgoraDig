@@ -35,7 +35,7 @@ const axios = require('axios');
  * @constant {string} DEFAULT_AVATAR_PATH - Ruta a la imagen de perfil por defecto.
  * @description Se usa como fallback cuando un usuario no tiene imagen o la ruta está rota.
  */
-const DEFAULT_AVATAR_PATH = '/images/default-avatar.webp';
+const DEFAULT_AVATAR_PATH = '/images/user_img/default-avatar.webp';
 
 /**
  * @function getValidProfilePicturePath
@@ -512,7 +512,7 @@ app.post('/register',
         };
 
         // --- Validación de Datos ---
-        if (!firstName || !lastName || !username || !email || !password || !confirmPassword || !dateOfBirth || !tempFile) {
+        if (!firstName || !lastName || !username || !email || !password || !confirmPassword || !dateOfBirth) {
             cleanupTempFile();
             return res.status(400).json({ errors: { general: 'Faltan campos por rellenar.' } });
         }
@@ -575,16 +575,28 @@ app.post('/register',
         });
         await newUser.save();
 
-        // Procesamiento de la imagen de perfil: redimensionar y convertir a WebP.
+        // Procesamiento de la imagen de perfil.
         const newFileName = `${newUser._id}.webp`;
         const newPath = path.join(__dirname, 'uploads', newFileName);
 
-        await sharp(tempFile.path)
-            .resize(400, 400, { fit: 'cover' })
-            .webp({ quality: 80 })
-            .toFile(newPath);
-
-        cleanupTempFile(); // Elimina el archivo temporal original.
+        if (tempFile) {
+            // Si el usuario subió una imagen, procesarla.
+            await sharp(tempFile.path)
+                .resize(400, 400, { fit: 'cover' })
+                .webp({ quality: 80 })
+                .toFile(newPath);
+            cleanupTempFile(); // Elimina el archivo temporal original.
+        } else {
+            // Si no subió imagen, asignar una aleatoria.
+            const avatarIndex = Math.floor(Math.random() * 10) + 1; // Genera un número del 1 al 10.
+            const sourceAvatarPath = path.join(__dirname, 'public', 'images', 'user_img', `user${avatarIndex}.webp`);
+            
+            // Procesa y guarda el avatar por defecto con las mismas especificaciones.
+            await sharp(sourceAvatarPath)
+                .resize(400, 400, { fit: 'cover' })
+                .webp({ quality: 80 })
+                .toFile(newPath);
+        }
 
         // Actualiza el usuario con la ruta de su nueva foto de perfil.
         newUser.profilePicturePath = `uploads/${newFileName}`;
@@ -874,7 +886,7 @@ app.delete('/api/profile', actionLimiter, isAuthenticated, async (req, res) => {
                 username: anonymizedUsername,
                 email: anonymizedEmail,
                 description: '',
-                profilePicturePath: 'images/default-avatar.webp', // Asigna el avatar por defecto (sin / al inicio para la DB)
+                profilePicturePath: 'images/user_img/default-avatar.webp', // Asigna el avatar por defecto
                 password: undefined, // Elimina la contraseña.
                 recoveryPIN: undefined // Elimina el PIN.
             }
