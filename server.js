@@ -21,22 +21,10 @@ const session = require('express-session');
 const MongoStore = require('connect-mongo');
 const bcrypt = require('bcrypt');
 const multer = require('multer');
+const sharp = require('sharp');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const axios = require('axios');
-const cloudinary = require('cloudinary').v2;
-const sharp = require('sharp');
-
-
-// =================================================================
-//  CLOUDINARY CONFIG
-// =================================================================
-cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
-    secure: true,
-});
 
 
 // =================================================================
@@ -45,30 +33,31 @@ cloudinary.config({
 
 /**
  * @constant {string} DEFAULT_AVATAR_PATH - Ruta a la imagen de perfil por defecto.
- * @description Se usa como fallback cuando un usuario no tiene imagen de perfil.
+ * @description Se usa como fallback cuando un usuario no tiene imagen o la ruta está rota.
  */
 const DEFAULT_AVATAR_PATH = '/images/user_img/default-avatar.webp';
 
 /**
- * @function getProfilePictureUrl
- * @description Genera una URL segura para la imagen de perfil de un usuario.
- * Si el usuario tiene una imagen en Cloudinary, genera una URL firmada de acceso privado.
- * Si no, devuelve la ruta del avatar por defecto local.
- * @param {string} publicId - El public_id de la imagen en Cloudinary.
- * @returns {string} Una URL válida y segura para ser servida al cliente.
+ * @function getValidProfilePicturePath
+ * @description Verifica si la ruta de una imagen de perfil existe en el sistema de archivos.
+ * Si no existe, devuelve la ruta de la imagen por defecto para evitar enlaces rotos en el cliente.
+ * @param {string} picturePath - La ruta de la imagen guardada en la base de datos del usuario.
+ * @returns {string} Una ruta de imagen válida y segura para ser servida al cliente.
  */
-function getProfilePictureUrl(publicId) {
-    if (!publicId) {
+function getValidProfilePicturePath(picturePath) {
+    if (!picturePath) {
         return DEFAULT_AVATAR_PATH;
     }
     
-    // Genera una URL firmada que es válida por 1 hora.
-    // Esto asegura que las imágenes privadas solo sean accesibles a través de la aplicación.
-    return cloudinary.url(publicId, {
-        type: 'private',
-        sign_url: true,
-        secure: true,
-    });
+    // Asegura que la ruta de la DB (ej: 'uploads/file.webp') se sirva como ruta absoluta.
+    const absolutePath = picturePath.startsWith('/') ? picturePath : `/${picturePath}`;
+    const physicalPath = path.join(__dirname, picturePath.startsWith('/') ? picturePath.substring(1) : picturePath);
+
+    if (fs.existsSync(physicalPath)) {
+        return absolutePath;
+    }
+    
+    return DEFAULT_AVATAR_PATH;
 }
 
 
@@ -79,8 +68,8 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Medida de seguridad crítica: la aplicación no debe iniciar sin los secretos requeridos.
-if (!process.env.SESSION_SECRET || !process.env.TURNSTILE_SECRET_KEY || !process.env.MONGODB_URI_USERS || !process.env.MONGODB_URI_MESSAGES || !process.env.CLOUDINARY_CLOUD_NAME) {
-    console.error('FATAL ERROR: Una o más variables de entorno críticas (SESSION_SECRET, TURNSTILE_SECRET_KEY, MONGODB_URI_*, CLOUDINARY_*) no están definidas.');
+if (!process.env.SESSION_SECRET || !process.env.TURNSTILE_SECRET_KEY || !process.env.MONGODB_URI_USERS || !process.env.MONGODB_URI_MESSAGES) {
+    console.error('FATAL ERROR: Una o más variables de entorno críticas (SESSION_SECRET, TURNSTILE_SECRET_KEY, MONGODB_URI_USERS, MONGODB_URI_MESSAGES) no están definidas.');
     process.exit(1); // Termina el proceso si la configuración esencial falta.
 }
 
@@ -121,13 +110,14 @@ app.use(
             ...helmet.contentSecurityPolicy.getDefaultDirectives(),
             "script-src": ["'self'", "https://challenges.cloudflare.com"],
             "frame-src": ["'self'", "https://challenges.cloudflare.com"],
-            "img-src": ["'self'", "res.cloudinary.com"], // Permite imágenes desde nuestro dominio de Cloudinary
         },
     })
 );
 
 // Parsea cuerpos de petición con formato JSON.
 app.use(express.json());
+// Sirve estáticamente los archivos subidos (fotos de perfil).
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Configuración de la sesión de usuario, almacenada en MongoDB para persistencia.
 app.use(session({
@@ -289,7 +279,7 @@ const userSchema = new mongoose.Schema({
     password: { type: String, required: true, select: false },
     recoveryPIN: { type: String, required: true, select: false, unique: true },
     description: { type: String, trim: true, maxlength: 300, default: '' },
-    profilePicturePublicId: { type: String },
+    profilePicturePath: { type: String },
     acceptsPublicity: { type: Boolean, default: false, index: true },
     role: { type: String, enum: ['user', 'admin', 'moderator'], default: 'user', index: true },
     userStatus: { type: String, enum: ['active', 'verified', 'banned', 'deleted'], default: 'active', index: true },
@@ -319,11 +309,10 @@ const LoginAttempt = usersDbConnection.model('LoginAttempt', loginAttemptSchema)
 /**
  * @constant upload
  * @description Configuración de Multer para la gestión de subida de archivos.
- * Almacena los archivos en memoria para su posterior procesamiento y subida a Cloudinary.
- * Limita el tamaño a 4MB.
+ * Almacena temporalmente los archivos en la carpeta 'uploads/' y limita su tamaño a 4MB.
  */
 const upload = multer({
-  storage: multer.memoryStorage(),
+  dest: 'uploads/',
   limits: {
     fileSize: 4 * 1024 * 1024 // 4 Megabytes
   }
@@ -476,7 +465,7 @@ app.post('/login', sensitiveRouteLimiter, verifyTurnstile, async (req, res) => {
 
 /**
  * @route   POST /register
- * @description Registra un nuevo usuario, incluyendo la subida y procesamiento de imagen de perfil a Cloudinary.
+ * @description Registra un nuevo usuario, incluyendo la subida y procesamiento de imagen de perfil.
  * @access  Public
  * @param   {object} req.body - Datos del formulario de registro (multipart/form-data).
  * @param   {Express.Multer.File} req.file - Archivo de imagen de perfil subido.
@@ -485,7 +474,9 @@ app.post('/login', sensitiveRouteLimiter, verifyTurnstile, async (req, res) => {
  * @returns {object} 500 - Error del servidor.
  */
 app.post('/register',
+    // El limitador de peticiones se aplica ANTES de procesar el archivo para prevenir DoS.
     sensitiveRouteLimiter,
+    // Middleware de Multer para manejar la subida del archivo. Lo ponemos ANTES de Turnstile para parsear el form-data.
     (req, res, next) => {
         upload.single('profilePicture')(req, res, (err) => {
             if (err instanceof multer.MulterError) {
@@ -499,8 +490,13 @@ app.post('/register',
             next();
         });
     },
+    // El middleware de Turnstile se aplica DESPUÉS de multer.
     verifyTurnstile,
+    // Controlador principal de la ruta.
     async (req, res) => {
+
+    const tempFile = req.file;
+
     try {
         const {
             firstName, lastName, dateOfBirth,
@@ -508,31 +504,70 @@ app.post('/register',
             description, acceptsPublicity
         } = req.body;
 
+        // Función auxiliar para limpiar el archivo temporal en caso de error.
+        const cleanupTempFile = () => {
+            if (tempFile && fs.existsSync(tempFile.path)) {
+                fs.unlinkSync(tempFile.path);
+            }
+        };
+
         // --- Validación de Datos ---
         if (!firstName || !lastName || !username || !email || !password || !confirmPassword || !dateOfBirth) {
+            cleanupTempFile();
             return res.status(400).json({ errors: { general: 'Faltan campos por rellenar.' } });
         }
 
         const nameRegex = /^[\p{L}\s]+$/u;
-        if (!nameRegex.test(firstName)) return res.status(400).json({ errors: { firstName: 'El nombre solo puede contener letras y espacios.' } });
-        if (!nameRegex.test(lastName)) return res.status(400).json({ errors: { lastName: 'Los apellidos solo pueden contener letras y espacios.' } });
-        if (username.length < 3 || username.length > 20) return res.status(400).json({ errors: { username: 'El nombre de usuario debe tener entre 3 y 20 caracteres.' } });
+        if (!nameRegex.test(firstName)) {
+            cleanupTempFile();
+            return res.status(400).json({ errors: { firstName: 'El nombre solo puede contener letras y espacios.' } });
+        }
+        if (!nameRegex.test(lastName)) {
+            cleanupTempFile();
+            return res.status(400).json({ errors: { lastName: 'Los apellidos solo pueden contener letras y espacios.' } });
+        }
+
+        if (username.length < 3 || username.length > 20) {
+            cleanupTempFile();
+            return res.status(400).json({ errors: { username: 'El nombre de usuario debe tener entre 3 y 20 caracteres.' } });
+        }
+
         const emailRegex = /\S+@\S+\.\S+/;
-        if (!emailRegex.test(email)) return res.status(400).json({ errors: { email: 'Por favor, introduce un formato de email válido.' } });
-        if (email !== confirmEmail) return res.status(400).json({ errors: { confirmEmail: 'Los emails no coinciden.' } });
-        if (password.length < 6) return res.status(400).json({ errors: { password: 'La contraseña debe tener al menos 6 caracteres.' } });
-        if (password !== confirmPassword) return res.status(400).json({ errors: { confirmPassword: 'Las contraseñas no coinciden.' } });
+        if (!emailRegex.test(email)) {
+            cleanupTempFile();
+            return res.status(400).json({ errors: { email: 'Por favor, introduce un formato de email válido.' } });
+        }
+        if (email !== confirmEmail) {
+            cleanupTempFile();
+            return res.status(400).json({ errors: { confirmEmail: 'Los emails no coinciden.' } });
+        }
+
+        if (password.length < 6) {
+            cleanupTempFile();
+            return res.status(400).json({ errors: { password: 'La contraseña debe tener al menos 6 caracteres.' } });
+        }
+        if (password !== confirmPassword) {
+            cleanupTempFile();
+            return res.status(400).json({ errors: { confirmPassword: 'Las contraseñas no coinciden.' } });
+        }
+
         const birthDate = new Date(dateOfBirth);
         const minDate = new Date(); minDate.setHours(0,0,0,0); minDate.setFullYear(minDate.getFullYear() - 110);
         const maxDate = new Date(); maxDate.setHours(0,0,0,0); maxDate.setFullYear(maxDate.getFullYear() - 16);
-        if (isNaN(birthDate.getTime()) || birthDate > maxDate || birthDate < minDate) return res.status(400).json({ errors: { dateOfBirth: 'La fecha de nacimiento proporcionada no es válida o eres demasiado joven para registrarte.' }});
-        
+        if (isNaN(birthDate.getTime()) || birthDate > maxDate || birthDate < minDate) {
+            cleanupTempFile();
+            return res.status(400).json({ errors: { dateOfBirth: 'La fecha de nacimiento proporcionada no es válida o eres demasiado joven para registrarte.' }});
+        }
+        // --- Fin de la Validación ---
+
         // Hashing de la contraseña y el PIN de recuperación.
         const salt = await bcrypt.genSalt(12);
         const hashedPassword = await bcrypt.hash(password, salt);
+
         const plainTextRecoveryPIN = crypto.randomBytes(8).toString('hex').toUpperCase();
         const hashedRecoveryPIN = await bcrypt.hash(plainTextRecoveryPIN, salt);
 
+        // Creación del nuevo usuario en la base de datos.
         const newUser = new User({
             firstName, lastName, dateOfBirth,
             username, email, password: hashedPassword, recoveryPIN: hashedRecoveryPIN,
@@ -540,33 +575,34 @@ app.post('/register',
         });
         await newUser.save();
 
-        if (req.file) {
-            const processedImageBuffer = await sharp(req.file.buffer)
-                .resize(400, 400, { fit: 'fill' })
+        // Procesamiento de la imagen de perfil.
+        const newFileName = `${newUser._id}.webp`;
+        const newPath = path.join(__dirname, 'uploads', newFileName);
+
+        if (tempFile) {
+            // Si el usuario subió una imagen, procesarla.
+            await sharp(tempFile.path)
+                .resize(400, 400, { fit: 'cover' })
                 .webp({ quality: 80 })
-                .toBuffer();
-
-            const uploadPromise = new Promise((resolve, reject) => {
-                const uploadStream = cloudinary.uploader.upload_stream(
-                    {
-                        public_id: newUser._id.toString(),
-                        type: "private",
-                        overwrite: true,
-                        resource_type: 'image'
-                    },
-                    (error, result) => {
-                        if (error) reject(error);
-                        else resolve(result);
-                    }
-                );
-                uploadStream.end(processedImageBuffer);
-            });
-
-            const uploadResult = await uploadPromise;
-            newUser.profilePicturePublicId = uploadResult.public_id;
-            await newUser.save();
+                .toFile(newPath);
+            cleanupTempFile(); // Elimina el archivo temporal original.
+        } else {
+            // Si no subió imagen, asignar una aleatoria.
+            const avatarIndex = Math.floor(Math.random() * 10) + 1; // Genera un número del 1 al 10.
+            const sourceAvatarPath = path.join(__dirname, 'public', 'images', 'user_img', `user${avatarIndex}.webp`);
+            
+            // Procesa y guarda el avatar por defecto con las mismas especificaciones.
+            await sharp(sourceAvatarPath)
+                .resize(400, 400, { fit: 'cover' })
+                .webp({ quality: 80 })
+                .toFile(newPath);
         }
 
+        // Actualiza el usuario con la ruta de su nueva foto de perfil.
+        newUser.profilePicturePath = `uploads/${newFileName}`;
+        await newUser.save();
+
+        // Envía la respuesta de éxito.
         res.status(201).json({
             message: '¡Usuario registrado con éxito! Se ha generado un PIN de recuperación único. Anótelo en un lugar seguro para poder recuperar su cuenta en caso de pérdida.',
             userId: newUser._id,
@@ -574,6 +610,12 @@ app.post('/register',
         });
 
     } catch (error) {
+        // Limpia el archivo temporal si se produce un error en cualquier punto.
+        if (tempFile && fs.existsSync(tempFile.path)) {
+            fs.unlinkSync(tempFile.path);
+        }
+        
+        // Manejo de errores de validación de Mongoose.
         if (error.name === 'ValidationError') {
             const errors = {};
             for (let field in error.errors) {
@@ -582,10 +624,13 @@ app.post('/register',
             return res.status(400).json({ errors });
         }
         
+        // Manejo de errores de duplicidad (código 11000 de MongoDB).
         if (error.code === 11000) {
+            // Unifica el mensaje para evitar la enumeración de usuarios/emails.
             if (error.keyPattern.username || error.keyPattern.email) {
                  return res.status(409).json({ errors: { general: 'El nombre de usuario o el email ya están en uso. Por favor, elige otros diferentes.' }});
             }
+            // Error poco común pero posible si hay colisión de PIN.
             if (error.keyPattern.recoveryPIN) return res.status(500).json({ message: 'Error al generar datos únicos. Inténtalo de nuevo.' });
         }
 
@@ -599,7 +644,7 @@ app.post('/register',
  * @description Cierra la sesión del usuario actual destruyendo la sesión en el servidor y limpiando la cookie del cliente.
  * @access  Private (implícito por requerir una sesión para destruir)
  * @returns {object} 200 - Mensaje de éxito.
- * @returns {object} 500 - Error del servidor.
+ * @returns {object} 500 - Error al destruir la sesión.
  */
 app.post('/logout', actionLimiter, (req, res) => {
     req.session.destroy(err => {
@@ -692,8 +737,7 @@ app.post('/api/users/reset-password', sensitiveRouteLimiter, async (req, res) =>
 app.get('/api/profile', apiLimiter, isAuthenticated, async (req, res) => {
     try {
         const user = await User.findById(req.session.userId)
-            .select('firstName lastName username email description profilePicturePublicId role userStatus createdAt')
-            .lean();
+            .select('firstName lastName username email description profilePicturePath role userStatus createdAt');
 
         if (!user) {
             // Si el usuario no se encuentra, destruye la sesión corrupta por seguridad.
@@ -701,8 +745,8 @@ app.get('/api/profile', apiLimiter, isAuthenticated, async (req, res) => {
             return res.status(404).json({ message: 'Usuario no encontrado.' });
         }
 
-        // Genera la URL de la imagen de perfil (firmada si es de Cloudinary).
-        user.profilePicturePath = getProfilePictureUrl(user.profilePicturePublicId);
+        // Asegura que la ruta de la imagen de perfil sea válida.
+        user.profilePicturePath = getValidProfilePicturePath(user.profilePicturePath);
 
         res.status(200).json(user);
 
@@ -727,6 +771,7 @@ app.get('/api/profile', apiLimiter, isAuthenticated, async (req, res) => {
 app.patch('/api/profile',
     actionLimiter,
     isAuthenticated,
+    // Middleware de Multer para manejar la subida del archivo. Se coloca antes del controlador.
     (req, res, next) => {
         upload.single('profilePicture')(req, res, (err) => {
             if (err instanceof multer.MulterError) {
@@ -740,62 +785,85 @@ app.patch('/api/profile',
             next();
         });
     },
+    // Controlador principal de la ruta.
     async (req, res) => {
         const { username, description } = req.body;
         const userId = req.session.userId;
+        const tempFile = req.file;
+
+        // Función auxiliar para limpiar el archivo temporal de multer en caso de error.
+        const cleanupTempFile = () => {
+            if (tempFile && fs.existsSync(tempFile.path)) {
+                fs.unlinkSync(tempFile.path);
+            }
+        };
 
         try {
-            if (!username && description === undefined && !req.file) {
+            // Validación: al menos un campo debe ser proporcionado.
+            if (!username && description === undefined && !tempFile) {
                 return res.status(400).json({ message: 'No se proporcionaron datos para actualizar.' });
             }
 
             const errors = {};
-            if (username && (username.length < 3 || username.length > 20)) errors.username = 'El nombre de usuario debe tener entre 3 y 20 caracteres.';
-            if (description && description.length > 300) errors.description = 'La descripción no puede exceder los 300 caracteres.';
-            if (Object.keys(errors).length > 0) return res.status(400).json({ errors });
+            if (username && (username.length < 3 || username.length > 20)) {
+                errors.username = 'El nombre de usuario debe tener entre 3 y 20 caracteres.';
+            }
+            if (description && description.length > 300) {
+                errors.description = 'La descripción no puede exceder los 300 caracteres.';
+            }
+            if (Object.keys(errors).length > 0) {
+                cleanupTempFile();
+                return res.status(400).json({ errors });
+            }
+
+            const userToUpdate = await User.findById(userId);
+            if (!userToUpdate) {
+                cleanupTempFile();
+                return res.status(404).json({ message: 'Usuario no encontrado.' });
+            }
 
             if (username) {
                 const existingUser = await User.findOne({ username: username, _id: { $ne: userId } });
-                if (existingUser) return res.status(409).json({ errors: { username: 'Este nombre de usuario ya está en uso.' } });
+                if (existingUser) {
+                    cleanupTempFile();
+                    return res.status(409).json({ errors: { username: 'Este nombre de usuario ya está en uso.' } });
+                }
             }
 
             const updateData = {};
             if (username) updateData.username = username;
             if (description !== undefined) updateData.description = description;
 
-            if (req.file) {
-                const processedImageBuffer = await sharp(req.file.buffer)
-                    .resize(400, 400, { fit: 'fill' })
+            // Si se subió un nuevo archivo, procesarlo.
+            if (tempFile) {
+                // 1. Eliminar la foto de perfil anterior para no dejar archivos huérfanos.
+                const oldPicturePath = userToUpdate.profilePicturePath;
+                if (oldPicturePath && oldPicturePath !== DEFAULT_AVATAR_PATH && oldPicturePath.startsWith('uploads/')) {
+                    const fullOldPath = path.join(__dirname, oldPicturePath);
+                    if (fs.existsSync(fullOldPath)) {
+                        fs.unlinkSync(fullOldPath);
+                    }
+                }
+
+                // 2. Procesar y guardar la nueva imagen.
+                const newFileName = `${userId}.webp`;
+                const newPath = path.join(__dirname, 'uploads', newFileName);
+                await sharp(tempFile.path)
+                    .resize(400, 400, { fit: 'cover' })
                     .webp({ quality: 80 })
-                    .toBuffer();
+                    .toFile(newPath);
 
-                const uploadPromise = new Promise((resolve, reject) => {
-                    const uploadStream = cloudinary.uploader.upload_stream(
-                        {
-                            public_id: userId.toString(),
-                            type: "private",
-                            overwrite: true,
-                            resource_type: 'image'
-                        },
-                        (error, result) => {
-                            if (error) reject(error);
-                            else resolve(result);
-                        }
-                    );
-                    uploadStream.end(processedImageBuffer);
-                });
+                cleanupTempFile(); // Elimina el archivo temporal original subido por multer.
 
-                const uploadResult = await uploadPromise;
-                updateData.profilePicturePublicId = uploadResult.public_id;
+                // 3. Añadir la nueva ruta a los datos a actualizar.
+                updateData.profilePicturePath = `uploads/${newFileName}`;
             }
 
             const updatedUser = await User.findByIdAndUpdate(
                 userId,
                 { $set: updateData },
                 { new: true, runValidators: true }
-            ).select('firstName lastName username email description profilePicturePublicId role createdAt').lean();
-            
-            updatedUser.profilePicturePath = getProfilePictureUrl(updatedUser.profilePicturePublicId);
+            ).select('firstName lastName username email description profilePicturePath role createdAt');
 
             res.status(200).json({
                 message: 'Perfil actualizado con éxito.',
@@ -803,6 +871,7 @@ app.patch('/api/profile',
             });
 
         } catch (error) {
+            cleanupTempFile();
             console.error('Error en PATCH /api/profile:', error);
             if (error.name === 'ValidationError') {
                 const validationErrors = {};
@@ -819,8 +888,8 @@ app.patch('/api/profile',
 /**
  * @route   DELETE /api/profile
  * @description Realiza un "soft delete" del usuario. Esto cambia su estado a 'deleted',
- * anonimiza sus datos, elimina su imagen de Cloudinary, y sus likes/reportes. 
- * Requiere el PIN de recuperación como medida de seguridad.
+ * anonimiza sus datos personales para cumplir con el derecho al olvido, elimina sus likes
+ * y su foto de perfil del sistema de archivos. Requiere el PIN de recuperación como medida de seguridad.
  * @access  Private (requiere `isAuthenticated` middleware)
  * @param {object} req.body - Cuerpo de la petición.
  * @param {string} req.body.recoveryPIN - El PIN de recuperación del usuario para confirmar la acción.
@@ -832,36 +901,43 @@ app.patch('/api/profile',
  */
 app.delete('/api/profile', actionLimiter, isAuthenticated, async (req, res) => {
     const userId = req.session.userId;
-    const { recoveryPIN } = req.body;
+    const { recoveryPIN } = req.body; // Se espera el PIN en el cuerpo de la petición.
 
     try {
+        // Validación: el PIN es obligatorio para esta operación.
         if (!recoveryPIN) {
             return res.status(400).json({ message: 'Se requiere el PIN de recuperación para eliminar la cuenta.' });
         }
 
-        const user = await User.findById(userId).select('+recoveryPIN profilePicturePublicId');
+        const user = await User.findById(userId).select('+recoveryPIN');
         if (!user) {
             return res.status(404).json({ message: 'Usuario no encontrado.' });
         }
 
+        // Comprueba si el PIN de recuperación es correcto.
         const isPinMatch = await bcrypt.compare(recoveryPIN, user.recoveryPIN);
         if (!isPinMatch) {
             return res.status(403).json({ message: 'El PIN de recuperación proporcionado es incorrecto.' });
         }
 
+        // Comprueba si ya existe una cuenta eliminada con el mismo email.
         const existingDeletedUser = await User.findOne({ email: `${user.email}_deleted`, userStatus: 'deleted' });
         if (existingDeletedUser) {
             return res.status(409).json({ message: 'Fallo al eliminar cuenta. Has eliminado otra cuenta hace poco' });
         }
         
+        // 1. Eliminar todos los 'likes' y reportes dados por este usuario.
         await Message.updateMany({ likes: userId }, { $pull: { likes: userId } });
         await Message.updateMany({ reportedBy: userId }, { $pull: { reportedBy: userId } });
 
-        // Eliminar la imagen de Cloudinary si existe.
-        if (user.profilePicturePublicId) {
-            await cloudinary.uploader.destroy(user.profilePicturePublicId, { resource_type: 'image', type: 'private' });
+        // 2. Eliminar la foto de perfil del sistema de archivos.
+        const picturePath = user.profilePicturePath;
+        if (picturePath && picturePath.startsWith('uploads/')) {
+            const fullPath = path.join(__dirname, picturePath);
+            if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
         }
 
+        // 3. Realizar el "soft delete": actualizar estado y anonimizar datos.
         const anonymizedEmail = `${user.email}_deleted`;
         const anonymizedUsername = `Usuario_Eliminado_${user._id}`;
 
@@ -873,12 +949,13 @@ app.delete('/api/profile', actionLimiter, isAuthenticated, async (req, res) => {
                 username: anonymizedUsername,
                 email: anonymizedEmail,
                 description: '',
-                profilePicturePublicId: undefined,
-                password: undefined,
-                recoveryPIN: undefined
+                profilePicturePath: 'images/user_img/default-avatar.webp', // Asigna el avatar por defecto
+                password: undefined, // Elimina la contraseña.
+                recoveryPIN: undefined // Elimina el PIN.
             }
         });
 
+        // 4. Destruir la sesión del usuario.
         req.session.destroy(err => {
             if (err) {
                 console.error('Error al destruir la sesión tras el soft-delete:', err);
@@ -917,14 +994,14 @@ app.get('/api/messages', apiLimiter, async (req, res) => {
             .populate({
                 path: 'sender',
                 model: User,
-                select: 'username profilePicturePublicId'
+                select: 'username profilePicturePath'
             })
             .populate('referencedMessage', 'title _id messageStatus')
             .lean({ virtuals: true });
 
         const processedMessages = messages.map(message => {
             if (message.sender) {
-                message.sender.profilePicturePath = getProfilePictureUrl(message.sender.profilePicturePublicId);
+                message.sender.profilePicturePath = getValidProfilePicturePath(message.sender.profilePicturePath);
             } else {
                 message.sender = {
                     username: 'Usuario Eliminado',
@@ -968,6 +1045,7 @@ app.post('/api/messages', actionLimiter, isAuthenticated, async (req, res) => {
     try {
         const { title, content, hashtags } = req.body;
 
+        // Comprueba si el usuario está baneado antes de permitirle publicar.
         const user = await User.findById(req.session.userId).select('userStatus');
         if (!user) {
             return res.status(404).json({ message: 'Usuario no encontrado.' });
@@ -976,11 +1054,21 @@ app.post('/api/messages', actionLimiter, isAuthenticated, async (req, res) => {
             return res.status(403).json({ message: 'Tu cuenta ha sido suspendida. No puedes publicar mensajes.' });
         }
 
-        if (!title || title.trim().length === 0) return res.status(400).json({ message: 'El título es obligatorio.' });
-        if (!content || content.trim().length === 0) return res.status(400).json({ message: 'El contenido es obligatorio.' });
-        if (title.trim().length > 100 || title.trim().length < 3) return res.status(400).json({ message: 'El título debe tener entre 3 y 100 caracteres.' });
-        if (content.trim().length > 1500 || content.trim().length < 10) return res.status(400).json({ message: 'El contenido debe tener entre 10 y 1500 caracteres.' });
+        // --- Validación del contenido del mensaje ---
+        if (!title || title.trim().length === 0) {
+            return res.status(400).json({ message: 'El título es obligatorio.' });
+        }
+        if (!content || content.trim().length === 0) {
+            return res.status(400).json({ message: 'El contenido es obligatorio.' });
+        }
+        if (title.trim().length > 100 || title.trim().length < 3) {
+            return res.status(400).json({ message: 'El título debe tener entre 3 y 100 caracteres.' });
+        }
+        if (content.trim().length > 1500 || content.trim().length < 10) {
+            return res.status(400).json({ message: 'El contenido debe tener entre 10 y 1500 caracteres.' });
+        }
 
+        // Parsea los hashtags de una cadena de texto a un array.
         const parsedHashtags = hashtags ? hashtags.match(/#(\w+)/g)?.map(h => h.substring(1)) || [] : [];
 
         const newMessage = new Message({
@@ -995,11 +1083,11 @@ app.post('/api/messages', actionLimiter, isAuthenticated, async (req, res) => {
         const populatedMessage = await newMessage.populate({
             path: 'sender',
             model: User,
-            select: 'username profilePicturePublicId'
+            select: 'username profilePicturePath'
         });
 
         const responseMessage = populatedMessage.toObject();
-        responseMessage.sender.profilePicturePath = getProfilePictureUrl(responseMessage.sender.profilePicturePublicId);
+        responseMessage.sender.profilePicturePath = getValidProfilePicturePath(responseMessage.sender.profilePicturePath);
 
         res.status(201).json(responseMessage);
 
@@ -1033,10 +1121,17 @@ app.post('/api/messages/:id/reply', actionLimiter, isAuthenticated, async (req, 
             Message.findById(parentMessageId)
         ]);
         
-        if (!user) return res.status(404).json({ message: 'Usuario no encontrado.' });
-        if (user.userStatus === 'banned') return res.status(403).json({ message: 'Tu cuenta ha sido suspendida. No puedes responder a mensajes.' });
-        if (!parentMessage) return res.status(404).json({ message: 'El mensaje al que intentas responder no existe.' });
+        if (!user) {
+            return res.status(404).json({ message: 'Usuario no encontrado.' });
+        }
+        if (user.userStatus === 'banned') {
+            return res.status(403).json({ message: 'Tu cuenta ha sido suspendida. No puedes responder a mensajes.' });
+        }
+        if (!parentMessage) {
+            return res.status(404).json({ message: 'El mensaje al que intentas responder no existe.' });
+        }
 
+        // --- Validación del contenido del mensaje ---
         if (!title || title.trim().length === 0) return res.status(400).json({ message: 'El título es obligatorio.' });
         if (!content || content.trim().length === 0) return res.status(400).json({ message: 'El contenido es obligatorio.' });
         if (title.trim().length > 100 || title.trim().length < 3) return res.status(400).json({ message: 'El título debe tener entre 3 y 100 caracteres.' });
@@ -1044,23 +1139,27 @@ app.post('/api/messages/:id/reply', actionLimiter, isAuthenticated, async (req, 
 
         const parsedHashtags = hashtags ? hashtags.match(/#(\w+)/g)?.map(h => h.substring(1)) || [] : [];
         
+        // 1. Crear el nuevo mensaje de respuesta
         const newReply = new Message({
-            title, content,
+            title,
+            content,
             hashtags: parsedHashtags,
             sender: req.session.userId,
             referencedMessage: parentMessageId
         });
         await newReply.save();
         
+        // 2. Añadir la ID de la respuesta al array del mensaje padre
         await Message.updateOne({ _id: parentMessageId }, { $push: { replies: newReply._id } });
 
+        // Poblar y devolver la respuesta
         const populatedReply = await newReply.populate({
             path: 'sender',
             model: User,
-            select: 'username profilePicturePublicId'
+            select: 'username profilePicturePath'
         });
         const responseMessage = populatedReply.toObject();
-        responseMessage.sender.profilePicturePath = getProfilePictureUrl(responseMessage.sender.profilePicturePublicId);
+        responseMessage.sender.profilePicturePath = getValidProfilePicturePath(responseMessage.sender.profilePicturePath);
         
         res.status(201).json(responseMessage);
 
@@ -1093,8 +1192,12 @@ app.delete('/api/messages/:id', actionLimiter, isAuthenticated, async (req, res)
             User.findById(userId).select('role')
         ]);
 
-        if (!message) return res.status(404).json({ message: 'Mensaje no encontrado.' });
-        if (!requester) return res.status(404).json({ message: 'Usuario solicitante no encontrado.' });
+        if (!message) {
+            return res.status(404).json({ message: 'Mensaje no encontrado.' });
+        }
+        if (!requester) {
+            return res.status(404).json({ message: 'Usuario solicitante no encontrado.' });
+        }
 
         const isAuthor = message.sender.toString() === userId.toString();
         const isModeratorOrAdmin = requester.role === 'admin' || requester.role === 'moderator';
@@ -1103,16 +1206,24 @@ app.delete('/api/messages/:id', actionLimiter, isAuthenticated, async (req, res)
             return res.status(403).json({ message: 'No tienes permiso para eliminar este mensaje.' });
         }
         
+        // El mensaje ya ha sido eliminado, no hacer nada.
         if (message.messageStatus !== 'active') {
              return res.status(200).json({ message: 'El mensaje ya ha sido eliminado.' });
         }
 
         let updateData;
-        if (isAuthor) updateData = { messageStatus: 'deleted' }; 
-        else if (requester.role === 'moderator') updateData = { messageStatus: 'deletedByModerator', deletedBy: userId };
-        else if (requester.role === 'admin') updateData = { messageStatus: 'deletedByAdmin', deletedBy: userId };
+        if (isAuthor) {
+            updateData = { messageStatus: 'deleted' };
+        } 
+        else if (requester.role === 'moderator') {
+            updateData = { messageStatus: 'deletedByModerator', deletedBy: userId };
+        }
+        else if (requester.role === 'admin') {
+            updateData = { messageStatus: 'deletedByAdmin', deletedBy: userId };
+        }
 
         await Message.findByIdAndUpdate(messageId, { $set: updateData });
+
         res.status(200).json({ message: 'Mensaje eliminado correctamente.' });
 
     } catch (error) {
@@ -1138,16 +1249,34 @@ app.post('/api/messages/:id/like', actionLimiter, isAuthenticated, async (req, r
         const userId = req.session.userId;
 
         const message = await Message.findById(messageId);
-        if (!message) return res.status(404).json({ message: 'Mensaje no encontrado.' });
+
+        if (!message) {
+            return res.status(404).json({ message: 'Mensaje no encontrado.' });
+        }
         
+        // Comprueba si el usuario ya ha dado 'like'.
         const hasLiked = message.likes.some(like => like.equals(userId));
-        const update = hasLiked ? { $pull: { likes: userId } } : { $addToSet: { likes: userId } };
-        
-        const updatedMessage = await Message.findByIdAndUpdate(messageId, update, { new: true });
+        let updatedMessage;
+
+        if (hasLiked) {
+            // Si ya le dio like, se lo quita ($pull).
+            updatedMessage = await Message.findByIdAndUpdate(
+                messageId,
+                { $pull: { likes: userId } },
+                { new: true }
+            );
+        } else {
+            // Si no le ha dado like, se lo añade ($addToSet para evitar duplicados).
+            updatedMessage = await Message.findByIdAndUpdate(
+                messageId,
+                { $addToSet: { likes: userId } },
+                { new: true }
+            );
+        }
 
         res.status(200).json({
             likeCount: updatedMessage.likeCount,
-            isLiked: !hasLiked
+            isLiked: !hasLiked // Devuelve el nuevo estado del 'like'.
         });
 
     } catch (error) {
@@ -1174,10 +1303,23 @@ app.post('/api/messages/:id/report', actionLimiter, isAuthenticated, async (req,
         const userId = req.session.userId;
 
         const message = await Message.findById(messageId);
-        if (!message) return res.status(404).json({ message: 'Mensaje no encontrado.' });
-        if (message.sender.equals(userId)) return res.status(403).json({ message: 'No puedes reportar tus propios mensajes.' });
 
-        await Message.findByIdAndUpdate(messageId, { $addToSet: { reportedBy: userId } });
+        if (!message) {
+            return res.status(404).json({ message: 'Mensaje no encontrado.' });
+        }
+
+        // Un usuario no puede reportar su propio mensaje.
+        if (message.sender.equals(userId)) {
+            return res.status(403).json({ message: 'No puedes reportar tus propios mensajes.' });
+        }
+
+        // Añade el ID del usuario al array de reportes, evitando duplicados.
+        await Message.findByIdAndUpdate(
+            messageId,
+            { $addToSet: { reportedBy: userId } },
+            { new: true }
+        );
+
         res.status(200).json({ message: 'El mensaje ha sido reportado correctamente.' });
 
     } catch (error) {
@@ -1200,11 +1342,17 @@ app.post('/api/messages/:id/report', actionLimiter, isAuthenticated, async (req,
 app.get('/api/messages/counts', apiLimiter, async (req, res) => {
     try {
         const { ids } = req.query;
-        if (!ids) return res.status(400).json({ message: 'No se proporcionaron IDs de mensajes.' });
+        if (!ids) {
+            return res.status(400).json({ message: 'No se proporcionaron IDs de mensajes.' });
+        }
 
         const messageIds = ids.split(',');
-        const messages = await Message.find({ '_id': { $in: messageIds } }).select('_id likes');
 
+        const messages = await Message.find({
+            '_id': { $in: messageIds }
+        }).select('_id likes'); // Selecciona solo los campos necesarios para optimizar.
+
+        // Crea un mapa de ID -> likeCount.
         const counts = messages.reduce((acc, msg) => {
             acc[msg._id] = msg.likeCount;
             return acc;
@@ -1240,15 +1388,17 @@ app.get('/api/messages/:id', apiLimiter, async (req, res) => {
             .populate({
                 path: 'sender',
                 model: User,
-                select: 'username profilePicturePublicId'
+                select: 'username profilePicturePath'
             })
             .populate('referencedMessage', 'title _id messageStatus')
             .lean({ virtuals: true });
 
-        if (!message) return res.status(404).json({ message: 'Mensaje no encontrado o ha sido eliminado.' });
+        if (!message) {
+            return res.status(404).json({ message: 'Mensaje no encontrado o ha sido eliminado.' });
+        }
 
         if (message.sender) {
-            message.sender.profilePicturePath = getProfilePictureUrl(message.sender.profilePicturePublicId);
+            message.sender.profilePicturePath = getValidProfilePicturePath(message.sender.profilePicturePath);
         } else {
             message.sender = { username: 'Usuario Eliminado', profilePicturePath: DEFAULT_AVATAR_PATH };
         }
@@ -1284,7 +1434,9 @@ app.get('/api/messages/:id/replies', apiLimiter, async (req, res) => {
         const skip = (page - 1) * limit;
 
         const parentMessage = await Message.findOne({ _id: parentMessageId, messageStatus: 'active' }).select('replies');
-        if (!parentMessage) return res.status(404).json({ message: 'El mensaje principal no fue encontrado.' });
+        if (!parentMessage) {
+            return res.status(404).json({ message: 'El mensaje principal no fue encontrado.' });
+        }
 
         const totalReplies = parentMessage.replies.length;
         const totalPages = Math.ceil(totalReplies / limit);
@@ -1293,15 +1445,22 @@ app.get('/api/messages/:id/replies', apiLimiter, async (req, res) => {
         if (totalReplies > 0 && page <= totalPages) {
             const replyIdsOnPage = parentMessage.replies.slice(skip, skip + limit);
             
-            const replies = await Message.find({ '_id': { $in: replyIdsOnPage }, 'messageStatus': 'active' })
-                .populate({ path: 'sender', model: User, select: 'username profilePicturePublicId' })
-                .populate('referencedMessage', 'title _id messageStatus')
-                .sort({ createdAt: 'asc' })
-                .lean({ virtuals: true });
+            const replies = await Message.find({
+                '_id': { $in: replyIdsOnPage },
+                'messageStatus': 'active'
+            })
+            .populate({
+                path: 'sender',
+                model: User,
+                select: 'username profilePicturePath'
+            })
+            .populate('referencedMessage', 'title _id messageStatus')
+            .sort({ createdAt: 'asc' })
+            .lean({ virtuals: true });
             
             docs = replies.map(reply => {
                 if (reply.sender) {
-                    reply.sender.profilePicturePath = getProfilePictureUrl(reply.sender.profilePicturePublicId);
+                    reply.sender.profilePicturePath = getValidProfilePicturePath(reply.sender.profilePicturePath);
                 } else {
                     reply.sender = { username: 'Usuario Eliminado', profilePicturePath: DEFAULT_AVATAR_PATH };
                 }
@@ -1311,7 +1470,11 @@ app.get('/api/messages/:id/replies', apiLimiter, async (req, res) => {
             });
         }
         
-        res.status(200).json({ docs, totalPages, currentPage: page });
+        res.status(200).json({
+            docs,
+            totalPages,
+            currentPage: page
+        });
 
     } catch (error) {
         console.error(`Error en GET /api/messages/${req.params.id}/replies:`, error);
@@ -1337,7 +1500,7 @@ app.get('/api/messages/:id/replies', apiLimiter, async (req, res) => {
 app.get('/api/users/username/:username', apiLimiter, async (req, res) => {
     try {
         const { username } = req.params;
-        let fieldsToSelect = 'firstName lastName username description profilePicturePublicId createdAt role userStatus';
+        let fieldsToSelect = 'firstName lastName username description profilePicturePath createdAt role userStatus';
         let requesterIsModeratorOrAdmin = false;
 
         if (req.query.include_moderation === 'true' && req.session.userId) {
@@ -1350,12 +1513,19 @@ app.get('/api/users/username/:username', apiLimiter, async (req, res) => {
             fieldsToSelect += ' strikes';
         }
         
-        const user = await User.findOne({ username: username }).select(fieldsToSelect).lean();
+        const user = await User.findOne({ username: username }).select(fieldsToSelect);
 
-        if (!user) return res.status(404).json({ message: 'Usuario no encontrado.' });
-        if (user.userStatus === 'deleted') return res.status(410).json({ message: 'Este usuario ha sido eliminado.' });
+        // Si el usuario no existe en la BD, devuelve 404.
+        if (!user) {
+            return res.status(404).json({ message: 'Usuario no encontrado.' });
+        }
 
-        user.profilePicturePath = getProfilePictureUrl(user.profilePicturePublicId);
+        // Si el usuario existe pero está eliminado, devuelve 410 Gone.
+        if (user.userStatus === 'deleted') {
+            return res.status(410).json({ message: 'Este usuario ha sido eliminado.' });
+        }
+
+        user.profilePicturePath = getValidProfilePicturePath(user.profilePicturePath);
         res.status(200).json(user);
 
     } catch (error) {
@@ -1387,36 +1557,63 @@ app.patch('/api/users/:username/admin-update', actionLimiter, isAuthenticated, i
         const requesterRole = req.userRole;
 
         const userToUpdate = await User.findOne({ username: username });
-        if (!userToUpdate) return res.status(404).json({ message: 'Usuario a actualizar no encontrado.' });
+        if (!userToUpdate) {
+            return res.status(404).json({ message: 'Usuario a actualizar no encontrado.' });
+        }
         
-        if (userToUpdate._id.toString() === req.session.userId) return res.status(403).json({ message: 'No puedes realizar acciones de moderación sobre tu propia cuenta.' });
-        if (requesterRole === 'admin' && userToUpdate.role === 'admin') return res.status(403).json({ message: 'Un administrador no puede modificar a otro administrador.' });
-        if (requesterRole === 'moderator' && (userToUpdate.role === 'admin' || userToUpdate.role === 'moderator')) return res.status(403).json({ message: 'Los moderadores no tienen permisos para modificar a otros moderadores o administradores.' });
+        // --- Controles de Jerarquía y Seguridad ---
+        // Previene que un moderador o admin se modifique a sí mismo.
+        if (userToUpdate._id.toString() === req.session.userId) {
+            return res.status(403).json({ message: 'No puedes realizar acciones de moderación sobre tu propia cuenta.' });
+        }
+        // Previene que un admin modifique a otro admin.
+        if (requesterRole === 'admin' && userToUpdate.role === 'admin') {
+            return res.status(403).json({ message: 'Un administrador no puede modificar a otro administrador.' });
+        }
+        // Previene que un moderador modifique a otros moderadores o a administradores.
+        if (requesterRole === 'moderator' && (userToUpdate.role === 'admin' || userToUpdate.role === 'moderator')) {
+            return res.status(403).json({ message: 'Los moderadores no tienen permisos para modificar a otros moderadores o administradores.' });
+        }
+        // --- Fin de los Controles ---
 
         const updateData = {};
+
+        // Los moderadores y admins pueden actualizar los strikes.
         if (strikes !== undefined) {
             const strikesAsNumber = Number(strikes);
-            if (isNaN(strikesAsNumber) || strikesAsNumber < 0) return res.status(400).json({ message: 'Los strikes deben ser un número no negativo.' });
+            if (isNaN(strikesAsNumber) || strikesAsNumber < 0) {
+                return res.status(400).json({ message: 'Los strikes deben ser un número no negativo.' });
+            }
             updateData.strikes = strikesAsNumber;
         }
         
+        // Solo los administradores pueden cambiar roles y estados.
         if (requesterRole === 'admin') {
             if (role) {
                 const validRoles = ['user', 'moderator', 'admin'];
-                if (!validRoles.includes(role)) return res.status(400).json({ message: 'El rol proporcionado no es válido.' });
+                if (!validRoles.includes(role)) {
+                    return res.status(400).json({ message: 'El rol proporcionado no es válido.' });
+                }
                 updateData.role = role;
             }
             if (userStatus) {
                 const validStatuses = ['active', 'verified', 'banned'];
-                if (!validStatuses.includes(userStatus)) return res.status(400).json({ message: 'El estado proporcionado no es válido.' });
+                if (!validStatuses.includes(userStatus)) {
+                    return res.status(400).json({ message: 'El estado proporcionado no es válido.' });
+                }
                 updateData.userStatus = userStatus;
             }
         }
         
-        if (Object.keys(updateData).length === 0) return res.status(400).json({ message: 'No se proporcionaron datos válidos para actualizar.' });
+        if (Object.keys(updateData).length === 0) {
+            return res.status(400).json({ message: 'No se proporcionaron datos válidos para actualizar.' });
+        }
 
-        const updatedUser = await User.findOneAndUpdate({ username: username }, { $set: updateData }, { new: true })
-            .select('firstName lastName username description profilePicturePublicId createdAt role strikes userStatus');
+        const updatedUser = await User.findOneAndUpdate(
+            { username: username },
+            { $set: updateData },
+            { new: true }
+        ).select('firstName lastName username description profilePicturePath createdAt role strikes userStatus');
         
         res.status(200).json({ message: 'Usuario actualizado correctamente.', user: updatedUser });
 
