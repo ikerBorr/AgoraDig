@@ -543,7 +543,9 @@ app.post('/register',
         });
         await newUser.save();
 
+        // Asignación de imagen de perfil: subida por el usuario o una aleatoria por defecto.
         if (req.file) {
+            // Si el usuario sube una imagen, se procesa y se sube a Cloudinary.
             const processedImageBuffer = await sharp(req.file.buffer)
                 .resize(400, 400, { fit: 'fill' })
                 .webp({ quality: 80 })
@@ -568,6 +570,29 @@ app.post('/register',
             const uploadResult = await uploadPromise;
             newUser.profilePicturePublicId = uploadResult.public_id;
             await newUser.save();
+        } else {
+            // Si el usuario no sube una imagen, se le asigna una de las 10 predefinidas de forma aleatoria.
+            const NUM_DEFAULT_AVATARS = 10;
+            const randomIndex = Math.floor(Math.random() * NUM_DEFAULT_AVATARS) + 1;
+            const defaultAvatarPath = path.join(__dirname, 'public', 'images', 'user_img', `user${randomIndex}.webp`);
+
+            try {
+                // Se sube una copia del avatar por defecto a Cloudinary con el ID del nuevo usuario como public_id.
+                const uploadResult = await cloudinary.uploader.upload(defaultAvatarPath, {
+                    public_id: newUser._id.toString(),
+                    type: "private",
+                    overwrite: true,
+                    resource_type: 'image'
+                });
+
+                // Se guarda la referencia (el public_id) en el documento del usuario.
+                newUser.profilePicturePublicId = uploadResult.public_id;
+                await newUser.save();
+            } catch (uploadError) {
+                // Si la subida del avatar por defecto falla, no se bloquea el registro.
+                // Se registrará el error en el servidor para su futura revisión.
+                console.error(`Error al subir el avatar por defecto para el usuario ${newUser._id}:`, uploadError);
+            }
         }
 
         res.status(201).json({
