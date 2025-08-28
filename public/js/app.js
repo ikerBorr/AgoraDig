@@ -20,6 +20,35 @@ const loaderContainer = document.getElementById('loader-container');
 // ===================================
 
 /**
+ * @function waitForImages
+ * @description Espera a que todas las imágenes dentro de un contenedor especificado se carguen por completo.
+ * Esto es crucial para evitar mostrar contenido antes de que los recursos visuales estén listos.
+ * @param {HTMLElement} container - El elemento del DOM que contiene las imágenes a esperar.
+ * @param {string} [selector='img'] - El selector CSS para encontrar las imágenes específicas a precargar.
+ * @returns {Promise<void>} Una promesa que se resuelve cuando todas las imágenes encontradas han terminado de cargar.
+ */
+async function waitForImages(container, selector = 'img') {
+    const images = Array.from(container.querySelectorAll(selector));
+    if (images.length === 0) {
+        return Promise.resolve(); // No hay imágenes, resolver inmediatamente.
+    }
+
+    const promises = images.map(img => {
+        return new Promise((resolve, reject) => {
+            // Si la imagen ya está cargada (ej. desde la caché del navegador), resolver de inmediato.
+            if (img.complete) {
+                resolve();
+            } else {
+                img.onload = resolve;
+                img.onerror = resolve; // Resolvemos también en error para no bloquear la carga de la página.
+            }
+        });
+    });
+
+    await Promise.all(promises);
+}
+
+/**
  * @function loadViewCss
  * @description Carga dinámicamente una hoja de estilos para una vista específica.
  * Elimina el CSS de la vista anterior para evitar conflictos de estilos.
@@ -964,6 +993,8 @@ async function renderPage(path) {
 
         templatePath = '';
 
+        await waitForImages(messagesContainer, '#author-avatar');
+
     } else if (pathname.startsWith('/messages/')) {
         cssPath = '/css/messages.css';
         await loadViewCss(cssPath);
@@ -1153,6 +1184,8 @@ async function renderPage(path) {
                 });
             }
 
+            await waitForImages(appRoot, '#author-avatar');
+
         } catch (error) {
             console.error('Error al renderizar el detalle del mensaje:', error);
             cssPath = '/css/error.css';
@@ -1335,6 +1368,7 @@ async function renderPage(path) {
                 }
             }
             templatePath = '';
+            await waitForImages(appRoot, '.profile-picture');
 
         } catch (error) {
             console.error('Error al renderizar el perfil de usuario:', error);
@@ -1386,6 +1420,8 @@ async function renderPage(path) {
 
             document.title = userData.username;
             templatePath = '';
+            
+            await waitForImages(appRoot, '.profile-picture');
             await loadAndExecuteScript('/templates/profile.html');
     
         } catch (error) {
@@ -1436,8 +1472,16 @@ async function renderPage(path) {
         await loadAndExecuteScript(templatePath);
     }
 
-    loaderContainer.classList.add('hidden'); 
-    appRoot.classList.remove('hidden');
+    // La lógica de ocultar el loader y mostrar el contenido ya no es global.
+    // Se maneja dentro de cada bloque condicional de la ruta para esperar a las imágenes.
+    // Si una ruta no espera imágenes, debe manejarlo explícitamente.
+    if (!appRoot.classList.contains('hidden')) {
+        // Si el appRoot ya es visible, no hacer nada.
+    } else {
+        // Si no, para las rutas sin carga de imágenes, hacemos la transición aquí.
+        loaderContainer.classList.add('hidden'); 
+        appRoot.classList.remove('hidden');
+    }
 }
 
 /**
