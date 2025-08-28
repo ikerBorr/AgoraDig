@@ -663,6 +663,69 @@ app.post('/logout', actionLimiter, (req, res) => {
 // =================================================================
 
 /**
+ * @route   POST /api/users/reset-password
+ * @description Permite a un usuario restablecer su contraseña utilizando su email y PIN de recuperación.
+ * @access  Public
+ * @param   {object} req.body - Cuerpo de la petición.
+ * @param   {string} req.body.email - El email del usuario.
+ * @param   {string} req.body.recoveryPIN - El PIN de recuperación único del usuario.
+ * @param   {string} req.body.newPassword - La nueva contraseña deseada.
+ * @param   {string} req.body.confirmPassword - La confirmación de la nueva contraseña.
+ * @returns {object} 200 - Mensaje de éxito.
+ * @returns {object} 400 - Errores de validación (campos faltantes, contraseñas no coinciden, etc.).
+ * @returns {object} 401 - El email o el PIN de recuperación son incorrectos.
+ * @returns {object} 500 - Error del servidor.
+ */
+app.post('/api/users/reset-password', sensitiveRouteLimiter, async (req, res) => {
+    const { email, recoveryPIN, newPassword, confirmPassword } = req.body;
+
+    try {
+        // --- Validación de la Petición ---
+        if (!email || !recoveryPIN || !newPassword || !confirmPassword) {
+            return res.status(400).json({ message: 'Todos los campos son obligatorios.' });
+        }
+        if (newPassword.length < 6) {
+            return res.status(400).json({ message: 'La nueva contraseña debe tener al menos 6 caracteres.' });
+        }
+        if (newPassword !== confirmPassword) {
+            return res.status(400).json({ message: 'Las contraseñas no coinciden.' });
+        }
+
+        // --- Búsqueda y Verificación del Usuario ---
+        const user = await User.findOne({ email: email.toLowerCase() }).select('+recoveryPIN +password');
+
+        // Mensaje de error genérico para prevenir la enumeración de usuarios.
+        const genericError = 'El email o el PIN de recuperación son incorrectos.';
+
+        if (!user) {
+            return res.status(401).json({ message: genericError });
+        }
+
+        const isPinMatch = await bcrypt.compare(recoveryPIN, user.recoveryPIN);
+        if (!isPinMatch) {
+            return res.status(401).json({ message: genericError });
+        }
+        
+        // --- Actualización de la Contraseña ---
+        const isSamePassword = await bcrypt.compare(newPassword, user.password);
+        if (isSamePassword) {
+            return res.status(400).json({ message: 'La nueva contraseña no puede ser igual a la anterior.' });
+        }
+
+        const salt = await bcrypt.genSalt(12);
+        user.password = await bcrypt.hash(newPassword, salt);
+        await user.save();
+
+        res.status(200).json({ message: 'Contraseña actualizada correctamente. Ya puedes iniciar sesión.' });
+
+    } catch (error) {
+        console.error('Error en /api/users/reset-password:', error);
+        res.status(500).json({ message: 'Error en el servidor al restablecer la contraseña.' });
+    }
+});
+
+
+/**
  * @route   GET /api/profile
  * @description Obtiene los datos del perfil del usuario actualmente autenticado.
  * @access  Private (requiere `isAuthenticated` middleware)

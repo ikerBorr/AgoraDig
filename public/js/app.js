@@ -468,6 +468,152 @@ function showReplyModal(parentId) {
     });
 }
 
+/**
+ * @function showPasswordResetModal
+ * @description Muestra un modal para que el usuario pueda restablecer su contraseña
+ * utilizando su email y su PIN de recuperación.
+ */
+function showPasswordResetModal() {
+    // Previene la creación de múltiples modales.
+    if (document.querySelector('.delete-confirmation-overlay')) return;
+
+    const modalOverlay = document.createElement('div');
+    modalOverlay.className = 'delete-confirmation-overlay visible';
+
+    const modalContent = document.createElement('div');
+    modalContent.className = 'modal-content';
+
+    modalContent.innerHTML = `
+        <div class="modal-header">
+            <h2>Restablecer Contraseña</h2>
+            <button class="close-button" title="Cerrar">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="password-reset-form" class="form" novalidate>
+                <div class="input-group" style="margin-bottom: 1rem;">
+                    <input type="email" name="email" placeholder="Email de la cuenta" required>
+                </div>
+                <div class="input-group" style="margin-bottom: 1rem;">
+                    <input type="text" name="recoveryPIN" placeholder="PIN de Recuperación" required>
+                    <small>En caso de no tener el PIN, ponte en contacto con nosotros.</small>
+                </div>
+                <div class="input-group password-wrapper" style="margin-bottom: 1rem;">
+                    <input type="password" name="newPassword" placeholder="Nueva Contraseña" required>
+                    <span class="password-toggle-icon" data-for="newPassword" title="Mostrar/Ocultar contraseña"></span>
+                </div>
+                <div class="input-group password-wrapper" style="margin-bottom: 1rem;">
+                    <input type="password" name="confirmPassword" placeholder="Confirmar Nueva Contraseña" required>
+                    <span class="password-toggle-icon" data-for="confirmPassword" title="Mostrar/Ocultar contraseña"></span>
+                </div>
+                <div id="reset-modal-message" class="message-info hidden" style="text-align: center; margin-top: 1rem;"></div>
+                <div class="modal-actions">
+                    <button type="button" class="button-secondary cancel-reset-btn">Cancelar</button>
+                    <button type="submit" class="button-primary confirm-reset-btn">Restablecer</button>
+                </div>
+            </form>
+        </div>
+    `;
+
+    modalOverlay.appendChild(modalContent);
+    document.body.appendChild(modalOverlay);
+
+    const closeModal = () => {
+        if (modalOverlay) modalOverlay.remove();
+    };
+
+    // --- Lógica para mostrar/ocultar contraseñas ---
+    const eyeIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+    const eyeOffIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`;
+    
+    modalContent.querySelectorAll('.password-toggle-icon').forEach(toggleIcon => {
+        toggleIcon.innerHTML = eyeIconSvg;
+        const inputName = toggleIcon.dataset.for;
+        const passwordInput = modalContent.querySelector(`input[name="${inputName}"]`);
+        if (passwordInput) {
+            toggleIcon.addEventListener('click', () => {
+                if (passwordInput.type === 'password') {
+                    passwordInput.type = 'text';
+                    toggleIcon.innerHTML = eyeOffIconSvg;
+                } else {
+                    passwordInput.type = 'password';
+                    toggleIcon.innerHTML = eyeIconSvg;
+                }
+            });
+        }
+    });
+
+    const form = modalContent.querySelector('#password-reset-form');
+    const messageEl = modalContent.querySelector('#reset-modal-message');
+    const confirmBtn = modalContent.querySelector('.confirm-reset-btn');
+    const cancelBtn = modalContent.querySelector('.cancel-reset-btn');
+    const closeButton = modalContent.querySelector('.close-button');
+
+    // Asignar eventos de cierre
+    cancelBtn.addEventListener('click', closeModal);
+    closeButton.addEventListener('click', closeModal);
+    modalOverlay.addEventListener('click', (e) => {
+        if (e.target === modalOverlay) closeModal();
+    });
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        // Validación de cliente
+        messageEl.className = 'message-info hidden error-text';
+        if (!data.email || !data.recoveryPIN || !data.newPassword || !data.confirmPassword) {
+            messageEl.textContent = 'Todos los campos son obligatorios.';
+            messageEl.classList.remove('hidden');
+            return;
+        }
+        if (data.newPassword.length < 6) {
+            messageEl.textContent = 'La nueva contraseña debe tener al menos 6 caracteres.';
+            messageEl.classList.remove('hidden');
+            return;
+        }
+        if (data.newPassword !== data.confirmPassword) {
+            messageEl.textContent = 'Las contraseñas no coinciden.';
+            messageEl.classList.remove('hidden');
+            return;
+        }
+        
+        if (!window.confirm('¿Estás seguro de que quieres cambiar tu contraseña? Esta acción no se puede deshacer.')) {
+            return;
+        }
+        
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Procesando...';
+        
+        try {
+            const response = await fetch('/api/users/reset-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const result = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(result.message || 'Error desconocido.');
+            }
+            
+            messageEl.className = 'message-info success-text';
+            messageEl.textContent = result.message;
+            messageEl.classList.remove('hidden');
+            form.reset();
+            setTimeout(closeModal, 2500);
+
+        } catch (error) {
+            messageEl.textContent = error.message;
+            messageEl.classList.remove('hidden');
+        } finally {
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = 'Restablecer';
+        }
+    });
+}
+
 
 // ===================================
 //  LÓGICA DE CARGA DE VISTAS

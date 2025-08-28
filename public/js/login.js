@@ -18,6 +18,7 @@ function initLoginForm() {
     const errorDivs = loginForm.querySelectorAll('.error-message');
     const generalMessageDiv = document.getElementById('message');
     const submitButton = loginForm.querySelector('button[type="submit"]');
+    const resetPasswordLink = document.getElementById('reset-password-link');
 
     const passwordInput = loginForm.querySelector('input[name="password"]');
     const toggleIcon = loginForm.querySelector('.password-toggle-icon');
@@ -45,6 +46,17 @@ function initLoginForm() {
             } else {
                 passwordInput.type = 'password';
                 toggleIcon.innerHTML = eyeIconSvg;
+            }
+        });
+    }
+
+    // Manejador del evento para abrir el modal de restablecimiento de contraseña.
+    if (resetPasswordLink) {
+        resetPasswordLink.addEventListener('click', (event) => {
+            event.preventDefault();
+            // Llama a la función global definida en app.js para mostrar el modal.
+            if (typeof showPasswordResetModal === 'function') {
+                showPasswordResetModal();
             }
         });
     }

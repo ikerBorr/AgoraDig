@@ -153,31 +153,34 @@ function initProfilePage() {
                 return;
             }
 
-            confirmDeleteBtn.disabled = true;
-            confirmDeleteBtn.textContent = 'Eliminando...';
-            modalDeleteError.classList.add('hidden');
+            // Añade una alerta de confirmación antes de proceder.
+            if (window.confirm('¿Estás absolutamente seguro de que quieres eliminar tu cuenta? Esta acción es irreversible y todos tus datos serán anonimizados.')) {
+                confirmDeleteBtn.disabled = true;
+                confirmDeleteBtn.textContent = 'Eliminando...';
+                modalDeleteError.classList.add('hidden');
 
-            try {
-                // Envía la petición DELETE con el PIN de recuperación para autorización.
-                const response = await fetch('/api/profile', {
-                    method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ recoveryPIN: recoveryPIN })
-                });
+                try {
+                    // Envía la petición DELETE con el PIN de recuperación para autorización.
+                    const response = await fetch('/api/profile', {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ recoveryPIN: recoveryPIN })
+                    });
 
-                if (response.ok) {
-                    window.location.href = '/'; // Redirige a la página de inicio.
-                } else {
-                    const result = await response.json();
-                    modalDeleteError.textContent = result.message || 'No se pudo eliminar la cuenta.';
+                    if (response.ok) {
+                        window.location.href = '/'; // Redirige a la página de inicio.
+                    } else {
+                        const result = await response.json();
+                        modalDeleteError.textContent = result.message || 'No se pudo eliminar la cuenta.';
+                        modalDeleteError.classList.remove('hidden');
+                    }
+                } catch (error) {
+                    modalDeleteError.textContent = 'Error de conexión.';
                     modalDeleteError.classList.remove('hidden');
+                } finally {
+                    confirmDeleteBtn.disabled = false;
+                    confirmDeleteBtn.textContent = 'Sí, eliminar mi cuenta';
                 }
-            } catch (error) {
-                modalDeleteError.textContent = 'Error de conexión.';
-                modalDeleteError.classList.remove('hidden');
-            } finally {
-                confirmDeleteBtn.disabled = false;
-                confirmDeleteBtn.textContent = 'Sí, eliminar mi cuenta';
             }
         });
     }
