@@ -784,7 +784,7 @@ function startLikePolling(messagesContainer) {
  * @returns {Promise<void>} Una promesa que se resuelve cuando la página ha sido completamente renderizada en el `appRoot`.
  */
 async function renderPage(path) {
-    const pathname = path.split('#')[0];
+    const pathname = path.split('?')[0].split('#')[0];
 
     loaderContainer.classList.remove('hidden');
     appRoot.classList.add('hidden');
@@ -826,6 +826,13 @@ async function renderPage(path) {
         appRoot.innerHTML = await fetchTemplate('/templates/home.html');
         document.title = 'Inicio | Búsqueda';
         
+        const urlParams = new URLSearchParams(window.location.search);
+        const initialQuery = urlParams.get('q');
+        const searchInput = document.getElementById('search-input');
+        if (initialQuery) {
+            searchInput.value = initialQuery;
+        }
+
         const messagesContainer = document.getElementById('messages-container');
         const loadMoreBtn = document.getElementById('load-more-btn');
         const feedLoader = document.getElementById('feed-loader');
@@ -853,11 +860,11 @@ async function renderPage(path) {
                 messagesContainer.innerHTML = '';
             }
             
-            const searchInput = document.getElementById('search-input');
+            const currentSearchInput = document.getElementById('search-input');
             const resultsHeader = document.querySelector('#home-feed h2');
 
             if (resultsHeader) {
-                if (searchInput.value.trim() === '') {
+                if (currentSearchInput.value.trim() === '') {
                     resultsHeader.textContent = 'Últimas tendencias:';
                 } else {
                     resultsHeader.textContent = 'Resultados:';
@@ -875,6 +882,11 @@ async function renderPage(path) {
             const formData = new FormData(searchForm);
             const params = new URLSearchParams(formData);
             params.append('page', currentPage);
+            
+            if (isNewSearch) {
+                const newUrl = `/home?${new URLSearchParams(formData).toString()}`;
+                window.history.pushState({ path: newUrl }, '', newUrl);
+            }
 
             try {
                 const response = await fetch(`/api/search?${params.toString()}`);
@@ -888,24 +900,31 @@ async function renderPage(path) {
                     return;
                 }
                 
-                if (data.searchType === 'user' && data.users && data.users.length > 0 && currentPage === 1) {
-                    const usersHeader = document.createElement('h3');
-                    usersHeader.textContent = 'Perfiles coincidentes:';
-                    usersHeader.style.width = '100%';
-                    messagesContainer.appendChild(usersHeader);
-                    data.users.forEach(user => {
-                        const userCard = createUserCard(user);
-                        messagesContainer.appendChild(userCard);
-                    });
-                    if (data.messages && data.messages.length > 0) {
-                        const messagesHeader = document.createElement('h3');
-                        messagesHeader.textContent = `Mensajes de ${data.users[0]?.username || 'este usuario'}`;
-                        messagesHeader.style.width = '100%';
-                         messagesContainer.appendChild(messagesHeader);
+                if (data.searchType === 'user') {
+                    if (data.users && data.users.length > 0 && currentPage === 1) {
+                        const usersHeader = document.createElement('h3');
+                        usersHeader.textContent = 'Perfiles coincidentes:';
+                        usersHeader.style.width = '100%';
+                        messagesContainer.appendChild(usersHeader);
+                        data.users.forEach(user => {
+                            const userCard = createUserCard(user);
+                            messagesContainer.appendChild(userCard);
+                        });
                     }
-                }
 
-                if(data.messages && data.messages.length > 0) {
+                    if (data.messages && data.messages.length > 0) {
+                        if (currentPage === 1) {
+                            const messagesHeader = document.createElement('h3');
+                            messagesHeader.textContent = `Mensajes de @${data.messages[0].sender.username}`;
+                            messagesHeader.style.width = '100%';
+                            messagesContainer.appendChild(messagesHeader);
+                        }
+                        data.messages.forEach(message => {
+                            const messageCard = createMessageCard(message, currentUser);
+                            messagesContainer.appendChild(messageCard);
+                        });
+                    }
+                } else if (data.messages && data.messages.length > 0) {
                     data.messages.forEach(message => {
                         const messageCard = createMessageCard(message, currentUser);
                         messagesContainer.appendChild(messageCard);
@@ -999,6 +1018,15 @@ async function renderPage(path) {
         });
 
         messagesContainer.addEventListener('click', async (event) => {
+            const hashtagLink = event.target.closest('.hashtag-link');
+            if (hashtagLink) {
+                event.preventDefault();
+                const searchInput = document.getElementById('search-input');
+                searchInput.value = hashtagLink.textContent;
+                await executeSearch(true);
+                return;
+            }
+
             const userCard = event.target.closest('.user-card-small');
             if (userCard) return;
 
@@ -1189,6 +1217,16 @@ async function renderPage(path) {
             const detailViewContainer = document.getElementById('message-detail-view');
             if (detailViewContainer) {
                 detailViewContainer.addEventListener('click', async (event) => {
+                     const hashtagLink = event.target.closest('.hashtag-link');
+                     if (hashtagLink) {
+                         event.preventDefault();
+                         const hashtag = hashtagLink.textContent;
+                         const searchUrl = `/home?q=${encodeURIComponent(hashtag)}`;
+                         window.history.pushState({}, '', searchUrl);
+                         await renderPage(searchUrl);
+                         return;
+                     }
+
                      const likeButton = event.target.closest('.like-button');
                      const replyButton = event.target.closest('.reply-message-btn');
                      const deleteButton = event.target.closest('.delete-message-btn');
