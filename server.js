@@ -1454,6 +1454,181 @@ app.patch('/api/users/:username/admin-update', actionLimiter, isAuthenticated, i
     }
 });
 
+/**
+ * @function buildDateFilter
+ * @description Construye un objeto de filtro de fecha para consultas de Mongoose.
+ * @param {string} dateRange - El rango de fecha ('day', 'week', 'month', 'all').
+ * @returns {object|null} Un objeto de filtro de Mongoose o null si el rango es 'all'.
+ */
+function buildDateFilter(dateRange) {
+    const now = new Date();
+    switch (dateRange) {
+        case 'day':
+            return { $gte: new Date(now.setDate(now.getDate() - 1)) };
+        case 'week':
+            return { $gte: new Date(now.setDate(now.getDate() - 7)) };
+        case 'month':
+            return { $gte: new Date(now.setMonth(now.getMonth() - 1)) };
+        case 'all':
+        default:
+            return null;
+    }
+}
+
+/**
+ * @function processMessagesForClient
+ * @description Procesa una lista de mensajes para prepararlos antes de enviarlos al cliente.
+ * Añade la URL de la imagen de perfil y el estado de 'like' del usuario actual.
+ * @param {Array<object>} messages - La lista de mensajes de la base de datos.
+ * @param {string|null} sessionUserId - El ID del usuario de la sesión actual.
+ * @returns {Array<object>} La lista de mensajes procesada.
+ */
+function processMessagesForClient(messages, sessionUserId) {
+    return messages.map(message => {
+        if (message.sender && message.sender.username) {
+            message.sender.profilePicturePath = getProfilePictureUrl(message.sender.profilePicturePublicId);
+        } else {
+            message.sender = {
+                username: 'Usuario Eliminado',
+                profilePicturePath: DEFAULT_AVATAR_PATH
+            };
+        }
+        const isLiked = sessionUserId ? message.likes?.some(like => like.toString() === sessionUserId.toString()) || false : false;
+        const isReported = false;
+
+        return { ...message, isLiked, isReported };
+    });
+}
+
+
+/**
+ * @route   GET /api/search
+ * @description Realiza búsquedas de mensajes, hashtags y usuarios. También devuelve mensajes en tendencia.
+ * @access  Public
+ * @param {object} req.query - Parámetros de la consulta.
+ * @param {string} [req.query.q=''] - El término de búsqueda. Si está vacío, devuelve mensajes en tendencia.
+ * @param {string} [req.query.sort='relevance'] - Criterio de ordenación ('relevance', 'likes_desc', 'likes_asc', 'date_desc', 'date_asc').
+ * @param {string} [req.query.dateRange='all'] - Rango de fechas ('day', 'week', 'month', 'all').
+ * @param {number} [req.query.page=1] - El número de página a obtener.
+ * @param {number} [req.query.limit=10] - El número de resultados por página.
+ * @returns {object} 200 - Objeto con los resultados de la búsqueda y la paginación.
+ * @returns {object} 500 - Error del servidor.
+ */
+app.get('/api/search', apiLimiter, async (req, res) => {
+    try {
+        const { q = '', sort = 'relevance', dateRange = 'all' } = req.query;
+        const page = parseInt(req.query.page, 10) || 1;
+        const limit = parseInt(req.query.limit, 10) || 10;
+        const skip = (page - 1) * limit;
+
+        if (q.startsWith('@')) {
+            const usernameQuery = q.substring(1);
+            const sanitizedUsername = usernameQuery.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            const users = await User.find({ 
+                username: { $regex: sanitizedUsername, $options: 'i' },
+                userStatus: { $in: ['active', 'verified'] }
+            }).select('username firstName lastName profilePicturePublicId').limit(5).lean();
+
+            const processedUsers = users.map(user => {
+                user.profilePicturePath = getProfilePictureUrl(user.profilePicturePublicId);
+                return user;
+            });
+            
+            const exactUser = await User.findOne({ username: { $regex: `^${sanitizedUsername}$`, $options: 'i' }});
+            let messages = [];
+            let totalMessages = 0;
+            
+            if (exactUser) {
+                messages = await Message.find({ sender: exactUser._id, messageStatus: 'active' })
+                    .sort({ createdAt: -1 }).skip(skip).limit(limit)
+                    .populate({ path: 'sender', model: User, select: 'username profilePicturePublicId' })
+                    .lean({ virtuals: true });
+                totalMessages = await Message.countDocuments({ sender: exactUser._id, messageStatus: 'active' });
+            }
+
+            return res.status(200).json({
+                searchType: 'user',
+                users: processedUsers,
+                messages: processMessagesForClient(messages, req.session.userId),
+                totalPages: Math.ceil(totalMessages / limit),
+                currentPage: page
+            });
+        }
+
+        let matchStage = { messageStatus: 'active' };
+        let sortStage = {};
+
+        const dateFilter = buildDateFilter(dateRange);
+        if (dateFilter) matchStage.createdAt = dateFilter;
+
+        if (q) {
+            const sanitizedQuery = q.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            if (q.startsWith('#')) {
+                matchStage.hashtags = { $regex: sanitizedQuery.substring(1), $options: 'i' };
+            } else {
+                matchStage.$or = [
+                    { title: { $regex: sanitizedQuery, $options: 'i' } },
+                    { content: { $regex: sanitizedQuery, $options: 'i' } }
+                ];
+            }
+        } else if (sort === 'relevance') {
+            const oneMonthAgo = new Date();
+            oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+            matchStage.createdAt = { $gte: oneMonthAgo };
+        }
+        
+        switch (sort) {
+            case 'likes_desc': sortStage = { likeCount: -1, createdAt: -1 }; break;
+            case 'likes_asc': sortStage = { likeCount: 1, createdAt: -1 }; break;
+            case 'date_desc': sortStage = { createdAt: -1 }; break;
+            case 'date_asc': sortStage = { createdAt: 1 }; break;
+            case 'relevance':
+            default:
+                sortStage = q ? { likeCount: -1, createdAt: -1 } : { trendScore: -1, createdAt: -1 };
+                break;
+        }
+
+        const countPipeline = [{ $match: matchStage }, { $count: 'total' }];
+        const totalCountResult = await Message.aggregate(countPipeline);
+        const totalMessages = totalCountResult.length > 0 ? totalCountResult[0].total : 0;
+        
+        let idAggregation = [
+            { $match: matchStage },
+            { $addFields: { likeCount: { $size: "$likes" } } }
+        ];
+        if (!q && sort === 'relevance') {
+            idAggregation.push({ $addFields: { trendScore: { $add: ["$likeCount", { $size: "$replies" }] } } });
+        }
+        idAggregation.push({ $sort: sortStage }, { $skip: skip }, { $limit: limit }, { $project: { _id: 1 } });
+        
+        const sortedMessageDocs = await Message.aggregate(idAggregation);
+        const messageIds = sortedMessageDocs.map(doc => doc._id);
+        
+        if (messageIds.length === 0) {
+            return res.status(200).json({ messages: [], totalPages: 0, currentPage: page });
+        }
+
+        const messages = await Message.find({ _id: { $in: messageIds } })
+            .populate({ path: 'sender', model: User, select: 'username profilePicturePublicId' })
+            .populate('referencedMessage', 'title _id messageStatus')
+            .lean({ virtuals: true });
+            
+        const sortedMessages = messageIds.map(id => messages.find(msg => msg._id.toString() === id.toString())).filter(Boolean);
+
+        res.status(200).json({
+            searchType: 'messages',
+            messages: processMessagesForClient(sortedMessages, req.session.userId),
+            totalPages: Math.ceil(totalMessages / limit),
+            currentPage: page
+        });
+
+    } catch (error) {
+        console.error('Error en GET /api/search:', error);
+        res.status(500).json({ message: 'Error en el servidor al realizar la búsqueda.' });
+    }
+});
+
+
 // =================================================================
 //  CATCH-ALL AND START SERVER
 // =================================================================

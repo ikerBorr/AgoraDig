@@ -50,27 +50,25 @@ async function waitForImages(container, selector = 'img') {
 
 /**
  * @function loadViewCss
- * @description Carga dinámicamente una hoja de estilos para una vista específica.
- * Elimina el CSS de la vista anterior para evitar conflictos de estilos.
- * @param {string|null} cssPath - La ruta al archivo CSS a cargar, o null para no cargar ninguno.
+ * @description Carga dinámicamente una o más hojas de estilos para una vista específica.
+ * Elimina los CSS de la vista anterior para evitar conflictos de estilos.
+ * @param {string[]} cssPaths - Un array con las rutas a los archivos CSS a cargar.
  */
-async function loadViewCss(cssPath) {
-    // Elimina la hoja de estilos de la vista anterior, si existe.
-    const oldLink = document.getElementById('view-specific-css');
-    if (oldLink) {
-        oldLink.remove();
-    }
+async function loadViewCss(cssPaths) {
+    document.querySelectorAll('.view-specific-css').forEach(link => link.remove());
 
-    // Si se proporciona una nueva ruta de CSS, crea y añade la nueva etiqueta <link>.
-    if (cssPath) {
-        return new Promise((resolve) => {
-            const link = document.createElement('link');
-            link.id = 'view-specific-css';
-            link.rel = 'stylesheet';
-            link.href = cssPath;
-            link.onload = () => resolve(); // Resuelve la promesa cuando el CSS ha cargado.
-            document.head.appendChild(link);
+    if (cssPaths && cssPaths.length > 0) {
+        const promises = cssPaths.map(path => {
+            return new Promise((resolve) => {
+                const link = document.createElement('link');
+                link.className = 'view-specific-css';
+                link.rel = 'stylesheet';
+                link.href = path;
+                link.onload = () => resolve();
+                document.head.appendChild(link);
+            });
         });
+        await Promise.all(promises);
     }
 }
 
@@ -135,9 +133,7 @@ function createMessageCard(message, currentUser) {
     likesInfo.className = 'likes-info';
     likesInfo.innerHTML = `
         <span class="like-count">${likeCount}</span>
-        <svg class="like-button ${likedClass}" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
-        </svg>
+        <svg class="like-button ${likedClass}" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
     `;
     cardActions.appendChild(likesInfo);
     
@@ -145,10 +141,7 @@ function createMessageCard(message, currentUser) {
     replyInfo.className = 'reply-info';
     replyInfo.innerHTML = `
         <span class="reply-count">${replyCount}</span>
-        <svg class="reply-message-btn" title="Responder" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="9 17 4 12 9 7"></polyline>
-            <path d="M20 18v-2a4 4 0 0 0-4-4H4"></path>
-        </svg>
+        <svg class="reply-message-btn" title="Responder" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"> <g transform="translate(24, 2) scale(-1, 1)"> <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path> </g> </svg>
     `;
     cardActions.appendChild(replyInfo);
 
@@ -206,7 +199,7 @@ function createMessageCard(message, currentUser) {
         } else {
             reportButton.className = 'report-message-btn button--icon';
             reportButton.title = 'Reportar mensaje';
-            reportButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-flag"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></svg>`;
+            reportButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-flag"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zm0 7v-7"/></svg>`;
         }
         footerActions.appendChild(reportButton);
     }
@@ -221,7 +214,7 @@ function createMessageCard(message, currentUser) {
         const deleteButton = document.createElement('button');
         deleteButton.className = 'delete-message-btn';
         deleteButton.title = 'Eliminar mensaje';
-        deleteButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-trash-2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`;
+        deleteButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-trash-2"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m-6 5v6m4-6v6"/></svg>`;
         footerActions.appendChild(deleteButton);
     }
     
@@ -231,6 +224,36 @@ function createMessageCard(message, currentUser) {
 
     card.appendChild(cardFooter);
 
+    return card;
+}
+
+/**
+ * @function createUserCard
+ * @description Crea y devuelve un elemento del DOM que representa una tarjeta de perfil de usuario simplificada para los resultados de búsqueda.
+ * @param {object} user - El objeto del usuario que contiene los datos a mostrar.
+ * @returns {HTMLElement} El elemento del DOM `article` con la clase 'user-card-small', listo para ser insertado.
+ */
+function createUserCard(user) {
+    const card = document.createElement('article');
+    card.className = 'user-card-small';
+
+    const userLink = document.createElement('a');
+    userLink.href = `/view-profile?username=${user.username}`;
+    userLink.className = 'user-card-small-link';
+
+    const userAvatar = document.createElement('img');
+    userAvatar.src = user.profilePicturePath;
+    userAvatar.alt = `Avatar de ${user.username}`;
+    userAvatar.className = 'user-card-small-avatar';
+
+    const userUsername = document.createElement('p');
+    userUsername.className = 'user-card-small-username';
+    userUsername.textContent = `@${user.username}`;
+    
+    userLink.appendChild(userAvatar);
+    userLink.appendChild(userUsername);
+    
+    card.appendChild(userLink);
     return card;
 }
 
@@ -551,8 +574,8 @@ function showPasswordResetModal() {
     };
 
     // --- Lógica para mostrar/ocultar contraseñas ---
-    const eyeIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
-    const eyeOffIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`;
+    const eyeIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8"/><circle cx="12" cy="12" r="3"/></svg>`;
+    const eyeOffIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9 9 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22"/></svg>`;
     
     modalContent.querySelectorAll('.password-toggle-icon').forEach(toggleIcon => {
         toggleIcon.innerHTML = eyeIconSvg;
@@ -706,7 +729,7 @@ async function fetchTemplate(path) {
     } catch (error) {
         console.error('Error al cargar la plantilla:', error);
         const response = await fetch('/templates/error-404.html');
-        await loadViewCss('/css/error.css'); // Cargar CSS de error si la plantilla principal falla
+        await loadViewCss(['/css/error.css']); // Cargar CSS de error si la plantilla principal falla
         return await response.text();
     }
 }
@@ -772,7 +795,7 @@ async function renderPage(path) {
     }
 
     let templatePath = '';
-    let cssPath = null; // Variable para almacenar la ruta del CSS específico de la vista.
+    let cssPaths = [];
 
     // Función de ayuda para verificar la autenticación, ahora en un ámbito superior para ser reutilizable.
     async function checkAuth() {
@@ -797,19 +820,23 @@ async function renderPage(path) {
     }
     
     if (pathname === '/' || pathname === '/home') {
-        cssPath = '/css/messages.css';
-        await loadViewCss(cssPath);
+        cssPaths = ['/css/messages.css', '/css/search.css'];
+        await loadViewCss(cssPaths);
 
         appRoot.innerHTML = await fetchTemplate('/templates/home.html');
-        document.title = 'Inicio';
+        document.title = 'Inicio | Búsqueda';
         
         const messagesContainer = document.getElementById('messages-container');
         const loadMoreBtn = document.getElementById('load-more-btn');
         const feedLoader = document.getElementById('feed-loader');
+        const searchForm = document.getElementById('search-form');
+        const toggleFiltersBtn = document.getElementById('toggle-filters-btn');
+        const filtersContainer = document.getElementById('search-filters-container');
+        
         let currentPage = 1;
         let totalPages = 1;
-
         let currentUser = null;
+
         try {
             const profileResponse = await fetch('/api/profile');
             if (profileResponse.ok) {
@@ -819,36 +846,71 @@ async function renderPage(path) {
             console.warn('No se pudo obtener el perfil del usuario (puede que no esté logueado).');
         }
 
-        const loadMessages = async () => {
+        const executeSearch = async (isNewSearch = false) => {
+            if (isNewSearch) {
+                currentPage = 1;
+                totalPages = 1;
+                messagesContainer.innerHTML = '';
+            }
+            
+            const searchInput = document.getElementById('search-input');
+            const resultsHeader = document.querySelector('#home-feed h2');
+
+            if (resultsHeader) {
+                if (searchInput.value.trim() === '') {
+                    resultsHeader.textContent = 'Últimas tendencias:';
+                } else {
+                    resultsHeader.textContent = 'Resultados:';
+                }
+            }
+
             if (currentPage > totalPages) {
                 loadMoreBtn.classList.add('hidden');
                 return;
             }
+
             loadMoreBtn.classList.add('hidden');
             feedLoader.classList.remove('hidden');
 
+            const formData = new FormData(searchForm);
+            const params = new URLSearchParams(formData);
+            params.append('page', currentPage);
+
             try {
-                const response = await fetch(`/api/messages?page=${currentPage}`);
-                if (!response.ok) throw new Error('Error al cargar los mensajes.');
+                const response = await fetch(`/api/search?${params.toString()}`);
+                if (!response.ok) throw new Error('Error al realizar la búsqueda.');
                 
                 const data = await response.json();
 
-                if (currentPage === 1 && data.messages.length === 0) {
-                    messagesContainer.innerHTML = `
-                        <div class="empty-feed-message">
-                            <br>
-                            <p>Aún no hay mensajes publicados. ¡Sé el primero en compartir tus ideas!</p>
-                            <br>
-                        </div>
-                    `;
+                if (currentPage === 1 && (!data.messages || data.messages.length === 0) && (!data.users || data.users.length === 0)) {
+                    messagesContainer.innerHTML = `<div class="empty-feed-message"><br><p>No se encontraron resultados. Prueba con otros términos de búsqueda o ajusta los filtros.</p><br></div>`;
                     feedLoader.classList.add('hidden');
                     return;
                 }
+                
+                if (data.searchType === 'user' && data.users && data.users.length > 0 && currentPage === 1) {
+                    const usersHeader = document.createElement('h3');
+                    usersHeader.textContent = 'Perfiles coincidentes:';
+                    usersHeader.style.width = '100%';
+                    messagesContainer.appendChild(usersHeader);
+                    data.users.forEach(user => {
+                        const userCard = createUserCard(user);
+                        messagesContainer.appendChild(userCard);
+                    });
+                    if (data.messages && data.messages.length > 0) {
+                        const messagesHeader = document.createElement('h3');
+                        messagesHeader.textContent = `Mensajes de ${data.users[0]?.username || 'este usuario'}`;
+                        messagesHeader.style.width = '100%';
+                         messagesContainer.appendChild(messagesHeader);
+                    }
+                }
 
-                data.messages.forEach(message => {
-                    const messageCard = createMessageCard(message, currentUser);
-                    messagesContainer.appendChild(messageCard);
-                });
+                if(data.messages && data.messages.length > 0) {
+                    data.messages.forEach(message => {
+                        const messageCard = createMessageCard(message, currentUser);
+                        messagesContainer.appendChild(messageCard);
+                    });
+                }
 
                 totalPages = data.totalPages;
                 currentPage++;
@@ -858,16 +920,31 @@ async function renderPage(path) {
                 } else {
                     loadMoreBtn.classList.add('hidden');
                 }
+
             } catch (error) {
                 console.error(error);
-                messagesContainer.innerHTML = `<p class="error-text">No se pudieron cargar los mensajes. Inténtalo de nuevo más tarde.</p>`;
+                messagesContainer.innerHTML = `<p class="error-text">No se pudieron cargar los resultados. Inténtalo de nuevo más tarde.</p>`;
             } finally {
                 feedLoader.classList.add('hidden');
             }
         };
 
-        loadMoreBtn.addEventListener('click', loadMessages);
-        await loadMessages();
+        searchForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            executeSearch(true);
+        });
+        
+        toggleFiltersBtn.addEventListener('click', () => {
+            filtersContainer.classList.toggle('hidden');
+        });
+
+        document.getElementById('sort-select').addEventListener('change', () => executeSearch(true));
+        document.getElementById('date-range-select').addEventListener('change', () => executeSearch(true));
+
+        loadMoreBtn.addEventListener('click', () => executeSearch(false));
+        
+        await executeSearch(true);
+
         startLikePolling(messagesContainer);
 
         const openModalBtn = document.getElementById('open-create-message-modal-btn');
@@ -903,10 +980,8 @@ async function renderPage(path) {
             const formData = new FormData(messageForm);
             const data = Object.fromEntries(formData.entries());
             
-            const url = '/api/messages';
-
             try {
-                const response = await fetch(url, {
+                const response = await fetch('/api/messages', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
@@ -916,10 +991,7 @@ async function renderPage(path) {
                     throw new Error(responseData.message || 'Error desconocido al publicar.');
                 }
                 hideModal();
-                currentPage = 1;
-                totalPages = 1;
-                messagesContainer.innerHTML = '';
-                await loadMessages();
+                await executeSearch(true);
             } catch (error) {
                 modalError.textContent = error.message;
                 modalError.classList.remove('hidden');
@@ -927,6 +999,9 @@ async function renderPage(path) {
         });
 
         messagesContainer.addEventListener('click', async (event) => {
+            const userCard = event.target.closest('.user-card-small');
+            if (userCard) return;
+
             const likeButton = event.target.closest('.like-button');
             const replyButton = event.target.closest('.reply-message-btn');
             const deleteButton = event.target.closest('.delete-message-btn');
@@ -992,12 +1067,11 @@ async function renderPage(path) {
         });
 
         templatePath = '';
-
-        await waitForImages(messagesContainer, '#author-avatar');
+        await waitForImages(messagesContainer, '#author-avatar, .user-card-small-avatar');
 
     } else if (pathname.startsWith('/messages/')) {
-        cssPath = '/css/messages.css';
-        await loadViewCss(cssPath);
+        cssPaths = ['/css/messages.css'];
+        await loadViewCss(cssPaths);
 
         try {
             const messageId = pathname.split('/')[2];
@@ -1188,8 +1262,8 @@ async function renderPage(path) {
 
         } catch (error) {
             console.error('Error al renderizar el detalle del mensaje:', error);
-            cssPath = '/css/error.css';
-            await loadViewCss(cssPath);
+            cssPaths = ['/css/error.css'];
+            await loadViewCss(cssPaths);
             appRoot.innerHTML = await fetchTemplate('/templates/error-404.html');
             const errorElement = document.getElementById('error-message-content');
             if(errorElement) errorElement.textContent = error.message;
@@ -1200,29 +1274,29 @@ async function renderPage(path) {
     } else if (pathname === '/about' || pathname === '/about-AgoraDig' || pathname === '/about-us') {
         templatePath = '/templates/about.html';
         document.title = 'Acerca de';
-        await loadViewCss(null);
+        await loadViewCss([]);
     } else if (pathname === '/contact' || pathname === '/contact-us') {
         templatePath = '/templates/contact.html';
         document.title = 'Contacto';
-        await loadViewCss(null);
+        await loadViewCss([]);
     } else if (pathname === '/register') {
         templatePath = '/templates/register.html';
         document.title = 'Crear Cuenta';
-        cssPath = '/css/forms.css';
-        await loadViewCss(cssPath);
+        cssPaths = ['/css/forms.css'];
+        await loadViewCss(cssPaths);
     } else if (pathname === '/register-success') {
         templatePath = '/templates/register-success.html';
         document.title = 'Registro Exitoso';
-        await loadViewCss(null);
+        await loadViewCss([]);
     } else if (pathname === '/login') {
         templatePath = '/templates/login.html';
         document.title = 'Iniciar Sesión';
-        cssPath = '/css/forms.css';
-        await loadViewCss(cssPath);
+        cssPaths = ['/css/forms.css'];
+        await loadViewCss(cssPaths);
     
     } else if (path.startsWith('/view-profile')) {
-        cssPath = '/css/profile.css';
-        await loadViewCss(cssPath);
+        cssPaths = ['/css/profile.css'];
+        await loadViewCss(cssPaths);
         try {
             const params = new URLSearchParams(window.location.search);
             const username = params.get('username');
@@ -1246,7 +1320,8 @@ async function renderPage(path) {
             if (!userResponse.ok) {
                 const errorData = await userResponse.json();
                 if (userResponse.status === 410) {
-                    await loadViewCss('/css/error.css');
+                    cssPaths = ['/css/error.css'];
+                    await loadViewCss(cssPaths);
                     appRoot.innerHTML = await fetchTemplate('/templates/error-410.html');
                     document.title = 'ERROR 410';
                     templatePath = '';
@@ -1372,14 +1447,15 @@ async function renderPage(path) {
 
         } catch (error) {
             console.error('Error al renderizar el perfil de usuario:', error);
-            await loadViewCss('/css/error.css');
+            cssPaths = ['/css/error.css'];
+            await loadViewCss(cssPaths);
             appRoot.innerHTML = await fetchTemplate('/templates/error-404.html');
             document.title = 'ERROR 404';
         }
     
     } else if (path.startsWith('/profile')) {
-        cssPath = '/css/profile.css';
-        await loadViewCss(cssPath);
+        cssPaths = ['/css/profile.css'];
+        await loadViewCss(cssPaths);
         try {
             const response = await fetch('/api/profile');
             if (!response.ok) {
@@ -1426,7 +1502,8 @@ async function renderPage(path) {
     
         } catch (error) {
             console.error(error);
-            await loadViewCss('/css/error.css');
+            cssPaths = ['/css/error.css'];
+            await loadViewCss(cssPaths);
             appRoot.innerHTML = await fetchTemplate('/templates/error-404.html');
             document.title = 'ERROR 404';
         }
@@ -1434,21 +1511,22 @@ async function renderPage(path) {
     } else if (pathname === '/terms-and-conditions') {
         templatePath = '/templates/terms-and-conditions.html';
         document.title = 'Términos y Condiciones';
-        await loadViewCss(null);
+        await loadViewCss([]);
     } else if (pathname === '/privacy-policy') {
         templatePath = '/templates/privacy-policy.html';
         document.title = 'Política de Privacidad';
-        await loadViewCss(null);
+        await loadViewCss([]);
 
     } else {
         templatePath = '/templates/error-404.html';
         document.title = 'ERROR 404';
-        cssPath = '/css/error.css';
-        await loadViewCss(cssPath);
+        cssPaths = ['/css/error.css'];
+        await loadViewCss(cssPaths);
     }
 
     if (templatePath) {
         appRoot.innerHTML = await fetchTemplate(templatePath);
+        if(cssPaths.length > 0) await loadViewCss(cssPaths);
     }
     
     if (pathname === '/register-success') {
@@ -1472,13 +1550,9 @@ async function renderPage(path) {
         await loadAndExecuteScript(templatePath);
     }
 
-    // La lógica de ocultar el loader y mostrar el contenido ya no es global.
-    // Se maneja dentro de cada bloque condicional de la ruta para esperar a las imágenes.
-    // Si una ruta no espera imágenes, debe manejarlo explícitamente.
     if (!appRoot.classList.contains('hidden')) {
         // Si el appRoot ya es visible, no hacer nada.
     } else {
-        // Si no, para las rutas sin carga de imágenes, hacemos la transición aquí.
         loaderContainer.classList.add('hidden'); 
         appRoot.classList.remove('hidden');
     }

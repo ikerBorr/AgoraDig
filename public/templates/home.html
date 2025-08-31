@@ -1,7 +1,41 @@
 <section id="home-feed" class="center center-text">
     <div>
-        <h1 >¡Bienvenid@ a Ágora Dig!</h1>
-        <h2>Mensajes recientes</h2>
+        <h1>¡Bienvenid@ a Ágora Dig!</h1>
+        <div id="search-section">
+            <form id="search-form" novalidate>
+                <div class="search-container">
+                    <input type="search" id="search-input" name="q" placeholder="Buscar mensajes, #hashtags, @usuarios..." aria-label="Caja de búsqueda">
+                    <button type="button" id="toggle-filters-btn" class="filter-button" title="Mostrar filtros">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3H2l8 9.46V19l4 2v-8.54z"/></svg>
+                    </button>
+                    <button type="submit" class="search-button" title="Buscar">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    </button>
+                </div>
+                <div id="search-filters-container" class="search-filters hidden">
+                    <div class="filter-group">
+                        <label for="sort-select">Ordenar por:</label>
+                        <select id="sort-select" name="sort">
+                            <option value="relevance" selected>Tendencias/Relevancia</option>
+                            <option value="date_desc">Más recientes</option>
+                            <option value="date_asc">Más antiguos</option>
+                            <option value="likes_desc">Más me gustas</option>
+                            <option value="likes_asc">Menos me gustas</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="date-range-select">Fecha:</label>
+                        <select id="date-range-select" name="dateRange">
+                            <option value="all" selected>Cualquier fecha</option>
+                            <option value="day">Últimas 24 horas</option>
+                            <option value="week">Última semana</option>
+                            <option value="month">Último mes</option>
+                        </select>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <h2>Resultados:</h2>
         <button id="open-create-message-modal-btn" class="button-primary" title="Crear un nuevo mensaje">Publicar</button>
     </div>
     <br>

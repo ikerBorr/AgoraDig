@@ -1,0 +1,140 @@
+/* Estilos para la sección de búsqueda en home.html */
+#search-section {
+    margin: 2rem auto;
+    max-width: 700px;
+    width: 100%;
+}
+
+.search-container {
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--color-borde);
+    border-radius: 25px;
+    background-color: var(--color-fondo-input);
+    padding: 5px;
+    transition: box-shadow 0.2s ease-in-out;
+}
+
+.search-container:focus-within {
+    box-shadow: 0 0 0 2px var(--color-enlace);
+    border-color: var(--color-enlace);
+}
+
+#search-input {
+    flex-grow: 1;
+    border: none;
+    background: transparent;
+    padding: 10px 15px;
+    font-size: 1rem;
+    color: var(--color-texto-input);
+    outline: none;
+}
+
+.search-container button {
+    border: none;
+    background-color: transparent;
+    cursor: pointer;
+    padding: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background-color 0.2s;
+}
+
+.search-container button:hover {
+    background-color: var(--color-boton-secundario-fondo-hover);
+}
+
+.search-container button svg {
+    width: 22px;
+    height: 22px;
+    stroke: var(--color-texto-secundario);
+}
+
+.search-container button.search-button {
+    background-color: var(--color-boton-primario-fondo);
+    margin-left: 5px;
+}
+
+.search-container button.search-button:hover {
+    background-color: var(--color-boton-primario-fondo-hover);
+}
+
+.search-container button.search-button svg {
+    stroke: var(--color-boton-primario-texto);
+}
+
+.search-filters {
+    margin-top: 1rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    justify-content: center;
+    max-height: 200px;
+    overflow: hidden;
+    transition: all 0.3s ease-in-out;
+    opacity: 1;
+}
+
+.search-filters.hidden {
+    max-height: 0;
+    margin-top: 0;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.filter-group label {
+    font-size: 0.9rem;
+    color: var(--color-texto-secundario);
+}
+
+/* Estilos para la tarjeta de usuario simplificada */
+.user-card-small {
+    background-color: var(--color-card-bg);
+    border-radius: var(--border-radius-card);
+    box-shadow: var(--box-shadow-medium);
+    padding: 15px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 200px; /* Ancho fijo para las tarjetas de usuario */
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.user-card-small:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--box-shadow-hover);
+}
+
+.user-card-small-link {
+    text-decoration: none;
+    color: inherit;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.user-card-small-avatar {
+    width: 100px; /* Define el ancho */
+    height: 100px; /* Define la altura */
+    border-radius: 50%; /* Hace la imagen redonda */
+    object-fit: cover; /* Asegura que la imagen cubra el área sin distorsionarse */
+    border: 3px solid var(--color-primary); /* Borde alrededor de la imagen */
+    margin-bottom: 10px;
+}
+
+.user-card-small-username {
+    font-weight: bold;
+    color: var(--color-text-primary);
+    font-size: 1.1em;
+}
