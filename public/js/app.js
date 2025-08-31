@@ -235,7 +235,7 @@ function createMessageCard(message, currentUser) {
  */
 function createUserCard(user) {
     const card = document.createElement('article');
-    card.className = 'user-card-small';
+    card.className = 'user-card-small center center-text';
 
     const userLink = document.createElement('a');
     userLink.href = `/view-profile?username=${user.username}`;
@@ -884,7 +884,8 @@ async function renderPage(path) {
             params.append('page', currentPage);
             
             if (isNewSearch) {
-                const newUrl = `/home?${new URLSearchParams(formData).toString()}`;
+                const searchOnlyParams = new URLSearchParams(formData);
+                const newUrl = `/home?${searchOnlyParams.toString()}`;
                 window.history.pushState({ path: newUrl }, '', newUrl);
             }
 
@@ -901,7 +902,8 @@ async function renderPage(path) {
                 }
                 
                 if (data.searchType === 'user') {
-                    if (data.users && data.users.length > 0 && currentPage === 1) {
+                    // Renderizar perfiles de usuario solo en la primera página de una nueva búsqueda.
+                    if (isNewSearch && data.users && data.users.length > 0) {
                         const usersHeader = document.createElement('h3');
                         usersHeader.textContent = 'Perfiles coincidentes:';
                         usersHeader.style.width = '100%';
@@ -912,19 +914,24 @@ async function renderPage(path) {
                         });
                     }
 
+                    // Renderizar mensajes del usuario.
                     if (data.messages && data.messages.length > 0) {
-                        if (currentPage === 1) {
+                        // El encabezado de mensajes solo se muestra una vez, en la primera página que contenga mensajes.
+                        if (!messagesContainer.querySelector('.user-messages-header')) {
                             const messagesHeader = document.createElement('h3');
+                            messagesHeader.className = 'user-messages-header';
                             messagesHeader.textContent = `Mensajes de @${data.messages[0].sender.username}`;
                             messagesHeader.style.width = '100%';
                             messagesContainer.appendChild(messagesHeader);
                         }
+                        
                         data.messages.forEach(message => {
                             const messageCard = createMessageCard(message, currentUser);
                             messagesContainer.appendChild(messageCard);
                         });
                     }
                 } else if (data.messages && data.messages.length > 0) {
+                    // Renderizado estándar para búsquedas de mensajes/hashtags.
                     data.messages.forEach(message => {
                         const messageCard = createMessageCard(message, currentUser);
                         messagesContainer.appendChild(messageCard);

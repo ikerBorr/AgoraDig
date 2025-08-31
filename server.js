@@ -1524,15 +1524,20 @@ app.get('/api/search', apiLimiter, async (req, res) => {
         if (q.startsWith('@')) {
             const usernameQuery = q.substring(1);
             const sanitizedUsername = usernameQuery.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-            const users = await User.find({ 
-                username: { $regex: sanitizedUsername, $options: 'i' },
-                userStatus: { $in: ['active', 'verified'] }
-            }).select('username firstName lastName profilePicturePublicId').limit(5).lean();
+            
+            // La búsqueda de perfiles de usuario solo se realiza en la primera página de resultados.
+            let processedUsers = [];
+            if (page === 1) {
+                const users = await User.find({ 
+                    username: { $regex: sanitizedUsername, $options: 'i' },
+                    userStatus: { $in: ['active', 'verified'] }
+                }).select('username firstName lastName profilePicturePublicId').limit(5).lean();
 
-            const processedUsers = users.map(user => {
-                user.profilePicturePath = getProfilePictureUrl(user.profilePicturePublicId);
-                return user;
-            });
+                processedUsers = users.map(user => {
+                    user.profilePicturePath = getProfilePictureUrl(user.profilePicturePublicId);
+                    return user;
+                });
+            }
             
             const exactUser = await User.findOne({ username: { $regex: `^${sanitizedUsername}$`, $options: 'i' }});
             let messages = [];
