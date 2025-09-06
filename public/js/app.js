@@ -182,7 +182,20 @@ function createMessageCard(message, currentUser) {
 
     const hashtagsSmall = document.createElement('small');
     hashtagsSmall.className = 'message-hashtags';
-    hashtagsSmall.innerHTML = formattedHashtags;
+    
+    if (message.hashtags && message.hashtags.length > 0) {
+        message.hashtags.forEach((tag, index) => {
+            const hashtagLink = document.createElement('a');
+            hashtagLink.href = "#"; // El manejador de eventos se encargará de la navegación.
+            hashtagLink.className = 'hashtag-link';
+            hashtagLink.textContent = `#${tag}`; // Usar .textContent es seguro contra XSS.
+            hashtagsSmall.appendChild(hashtagLink);
+
+            if (index < message.hashtags.length - 1) {
+                hashtagsSmall.appendChild(document.createTextNode(' '));
+            }
+        });
+    }
     cardFooter.appendChild(hashtagsSmall);
     
     const footerActions = document.createElement('div');

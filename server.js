@@ -359,6 +359,9 @@ const messageSchema = new mongoose.Schema({
 // Índice compuesto para optimizar las consultas de mensajes activos ordenados por fecha.
 messageSchema.index({ messageStatus: 1, createdAt: -1 });
 
+// Índice de texto para habilitar la búsqueda de texto completo en título, contenido y hashtags.
+messageSchema.index({ title: 'text', content: 'text', hashtags: 'text' });
+
 /**
  * @virtual likeCount
  * @description Campo virtual que calcula el número de 'likes' de un mensaje dinámicamente.
@@ -1569,12 +1572,9 @@ app.get('/api/search', apiLimiter, async (req, res) => {
         if (q) {
             const sanitizedQuery = q.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
             if (q.startsWith('#')) {
-                matchStage.hashtags = { $regex: sanitizedQuery.substring(1), $options: 'i' };
+                matchStage.hashtags = sanitizedQuery.substring(1).toLowerCase();
             } else {
-                matchStage.$or = [
-                    { title: { $regex: sanitizedQuery, $options: 'i' } },
-                    { content: { $regex: sanitizedQuery, $options: 'i' } }
-                ];
+                matchStage.$text = { $search: sanitizedQuery };
             }
         } else if (sort === 'relevance') {
             const oneMonthAgo = new Date();
