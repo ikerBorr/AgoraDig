@@ -91,10 +91,9 @@ function initLoginForm() {
             if (response.ok) {
                 generalMessageDiv.className = 'message-success';
                 generalMessageDiv.textContent = result.message + ' ¡Bienvenido!';
-                // Redirige al perfil del usuario después de un breve instante.
+                // Redirige a la página de inicio con una recarga completa.
                 setTimeout(() => {
-                    window.history.pushState({}, '', '/home');
-                    window.dispatchEvent(new PopStateEvent('popstate'));
+                    window.location.href = '/home';
                 }, 1500);
             } else {
                 // Si la respuesta indica un error del cliente (status 4xx).

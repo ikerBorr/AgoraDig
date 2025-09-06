@@ -1408,7 +1408,6 @@ async function renderPage(path) {
             let profileHtml = await fetchTemplate('/templates/view-profile.html');
             const joinDate = new Date(userData.createdAt).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
             
-            // Reemplazo de datos seguros (no controlados por el usuario, como la fecha).
             profileHtml = profileHtml.replace(/{{createdAt}}/g, joinDate);
             
             let adminControlsHtml = '';
@@ -1472,22 +1471,14 @@ async function renderPage(path) {
                  `;
             }
 
-            // Se inserta el HTML estructural en el DOM.
+            profileHtml = profileHtml.replace('{{moderationInfo}}', moderationInfoHtml);
+            profileHtml = profileHtml.replace('{{adminControls}}', adminControlsHtml);
+            
             appRoot.innerHTML = profileHtml;
-
-            const moderationInfoContainer = appRoot.querySelector('#moderation-info-display');
-            if (moderationInfoContainer) moderationInfoContainer.innerHTML = moderationInfoHtml;
-
-            const adminControlsContainer = appRoot.querySelector('#admin-controls-display');
-            if (adminControlsContainer) adminControlsContainer.innerHTML = adminControlsHtml;
-
             document.title = `Perfil de ${userData.username}`;
             
-            const profilePic = appRoot.querySelector('.profile-picture');
-            if (profilePic) {
-                profilePic.src = userData.profilePicturePath || '../images/user_img/default-avatar.webp';
-                profilePic.alt = `Foto de perfil de ${userData.username}`;
-            }
+            appRoot.querySelector('.profile-picture').src = userData.profilePicturePath || '../images/user_img/default-avatar.webp';
+            appRoot.querySelector('.profile-picture').alt = `Foto de perfil de ${userData.username}`;
             appRoot.querySelector('.profile-fullname').textContent = `${userData.firstName} ${userData.lastName}`;
             appRoot.querySelector('.profile-username').textContent = `@${userData.username}`;
             appRoot.querySelector('.profile-description').textContent = userData.description || 'Este usuario aún no ha añadido una descripción.';
