@@ -1,7 +1,36 @@
 <section id="contact" class="center center-text">
     <h1>Contacto</h1>
     <p>
-        Envíanos un mensaje mediante el siguiente formulario
+        Si tienes alguna duda, problema o sugerencia, envíanos un mensaje a través del siguiente formulario.
     </p>
-    <iframe class="google-form" src="https://docs.google.com/forms/d/e/1FAIpQLSdDd4LbTfI3ddMHX6mLaqD6AhyXEFSKbT8NSppJSFrO-Q8J2w/viewform?embedded=true" width="600" height="900" frameborder="0" marginheight="0" marginwidth="0">Cargando…</iframe>
+    <form id="contact-form" class="form center left-text" novalidate>
+        <div class="input-group">
+            <p>Nombre Completo:</p>
+            <input type="text" id="contact-name" name="name" placeholder="Nombre y Apellidos" required>
+        </div>
+        <br>
+        <div class="input-group">
+            <p>Correo Electrónico:</p>
+            <input type="email" id="contact-email" name="email" placeholder="example@domain" required>
+        </div>
+        <br>
+        <div class="input-group">
+            <p>Usuario <small>(Opcional)</small>:</p>
+            <input type="text" id="contact-username" name="username" placeholder="Username">
+        </div>
+        <br>
+        <div class="input-group">
+            <p>Asunto:</p>
+            <input type="text" id="contact-subject" name="subject" placeholder="Título" required maxlength="150">
+        </div>
+        <br>
+        <div class="input-group">
+            <p>Mensaje:</p>
+            <textarea id="contact-message" name="message" rows="8" placeholder="Escribe aquí tu mensaje..." required maxlength="1200"></textarea>
+        </div>
+
+        <p id="contact-form-message" class="message-info hidden" style="text-align: center; margin-top: 1rem;"></p>
+        
+        <button type="submit" class="button-primary center">Enviar Mensaje</button>
+    </form>
 </section>

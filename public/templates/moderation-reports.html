@@ -1,0 +1,17 @@
+<section id="moderation-reports-panel" class="container">
+    <h1>Panel de Moderación de Reportes</h1>
+    <p>Revisa los mensajes que han sido reportados por la comunidad.</p>
+
+    <div id="report-filters-container" class="filters-container hidden">
+        <label for="report-status-filter">Filtrar por estado:</label>
+        <select id="report-status-filter">
+            <option value="pendiente" selected>Pendientes de Revisión</option>
+            <option value="revisado">Ya Revisados</option>
+        </select>
+    </div>
+
+    <div id="reports-loader" class="loader hidden"></div>
+    <div id="reports-list-container">
+        </div>
+    <p id="reports-empty-message" class="empty-feed-message hidden">No hay reportes que coincidan con los filtros seleccionados.</p>
+</section>

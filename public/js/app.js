@@ -212,7 +212,7 @@ function createMessageCard(message, currentUser) {
         } else {
             reportButton.className = 'report-message-btn button--icon';
             reportButton.title = 'Reportar mensaje';
-            reportButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-flag"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zm0 7v-7"/></svg>`;
+            reportButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-flag"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>`;
         }
         footerActions.appendChild(reportButton);
     }
@@ -405,14 +405,15 @@ function showReportConfirmationModal(messageId, reportButtonElement) {
         confirmBtn.textContent = 'Reportando...';
         try {
             const response = await fetch(`/api/messages/${messageId}/report`, { method: 'POST' });
-            if (response.ok) {
+            const result = await response.json();
+
+            if (response.ok && result.isReported) {
                 closeModal();
                 reportButtonElement.disabled = true;
                 reportButtonElement.classList.add('reported');
                 reportButtonElement.innerHTML = 'Reportado';
             } else {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Error al reportar el mensaje.');
+                throw new Error(result.message || 'Error al reportar el mensaje.');
             }
         } catch (error) {
             modalError.textContent = error.message;
@@ -736,16 +737,21 @@ async function fetchTemplate(path) {
     try {
         const response = await fetch(path);
         if (!response.ok) {
-            throw new Error(`Plantilla no encontrada en la ruta: ${path}`);
+            if (response.status === 404) {
+                 const error404Response = await fetch('/templates/error-404.html');
+                 await loadViewCss(['/css/error.css']);
+                 return await error404Response.text();
+            }
+            throw new Error(`Error al cargar la plantilla: ${response.statusText}`);
         }
         return await response.text();
     } catch (error) {
-        console.error('Error al cargar la plantilla:', error);
-        const response = await fetch('/templates/error-404.html');
-        await loadViewCss(['/css/error.css']); // Cargar CSS de error si la plantilla principal falla
-        return await response.text();
+        console.error('Error crítico al cargar plantilla:', error);
+        // Fallback a un HTML de error genérico si todo lo demás falla
+        return `<section class="center center-text"><h1>Error</h1><p>No se pudo cargar el contenido. Por favor, intenta de nuevo.</p></section>`;
     }
 }
+
 
 /**
  * @function startLikePolling
@@ -1336,7 +1342,8 @@ async function renderPage(path) {
     } else if (pathname === '/contact' || pathname === '/contact-us') {
         templatePath = '/templates/contact.html';
         document.title = 'Contacto';
-        await loadViewCss([]);
+        cssPaths = ['/css/forms.css'];
+        await loadViewCss(cssPaths);
     } else if (pathname === '/register') {
         templatePath = '/templates/register.html';
         document.title = 'Crear Cuenta';
@@ -1566,6 +1573,42 @@ async function renderPage(path) {
             document.title = 'ERROR 404';
         }
 
+    } else if (pathname === '/admin/tickets' || pathname === '/moderation/reports') {
+        try {
+            const profileResponse = await fetch('/api/profile');
+            if (!profileResponse.ok) {
+                // Si no está autenticado, directamente a la página de error 403.
+                throw new Error('403');
+            }
+            const user = await profileResponse.json();
+            const isAdmin = user.role === 'admin';
+            const isModerator = user.role === 'moderator';
+            
+            let hasAccess = false;
+            if (pathname === '/admin/tickets' && isAdmin) {
+                hasAccess = true;
+                templatePath = '/templates/admin-tickets.html';
+                document.title = 'Panel de Tickets';
+                cssPaths = ['/css/admin.css'];
+            } else if (pathname === '/moderation/reports' && (isAdmin || isModerator)) {
+                hasAccess = true;
+                templatePath = '/templates/moderation-reports.html';
+                document.title = 'Panel de Reportes';
+                cssPaths = ['/css/admin.css', '/css/messages.css'];
+            }
+            
+            if (!hasAccess) {
+                throw new Error('403');
+            }
+            
+            await loadViewCss(cssPaths);
+
+        } catch (error) {
+            templatePath = '/templates/error-403.html';
+            document.title = '403 Acceso Denegado';
+            cssPaths = ['/css/error.css'];
+            await loadViewCss(cssPaths);
+        }
     } else if (pathname === '/terms-and-conditions') {
         templatePath = '/templates/terms-and-conditions.html';
         document.title = 'Términos y Condiciones';
@@ -1585,6 +1628,193 @@ async function renderPage(path) {
     if (templatePath) {
         appRoot.innerHTML = await fetchTemplate(templatePath);
         if(cssPaths.length > 0) await loadViewCss(cssPaths);
+    }
+    
+    // Lógica post-renderizado para las nuevas páginas
+    if (pathname === '/contact') {
+        const contactForm = document.getElementById('contact-form');
+        const messageEl = document.getElementById('contact-form-message');
+        contactForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(contactForm);
+            const data = Object.fromEntries(formData.entries());
+            messageEl.classList.add('hidden');
+
+            try {
+                const response = await fetch('/api/contact', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message);
+
+                messageEl.textContent = result.message;
+                messageEl.className = 'message-info success-text';
+                messageEl.classList.remove('hidden');
+                contactForm.reset();
+            } catch (error) {
+                messageEl.textContent = error.message;
+                messageEl.className = 'message-info error-text';
+                messageEl.classList.remove('hidden');
+            }
+        });
+    }
+
+    if (pathname === '/admin/tickets') {
+        const ticketsList = document.getElementById('tickets-list');
+        const loader = document.getElementById('tickets-loader');
+        const emptyMsg = document.getElementById('tickets-empty-message');
+        const filter = document.getElementById('ticket-status-filter');
+
+        const loadTickets = async () => {
+            loader.classList.remove('hidden');
+            ticketsList.innerHTML = '';
+            emptyMsg.classList.add('hidden');
+            try {
+                const status = filter.value;
+                const response = await fetch(`/api/admin/tickets?status=${status}`);
+                if (response.status === 403) {
+                     appRoot.innerHTML = await fetchTemplate('/templates/error-403.html');
+                     return;
+                }
+                if (!response.ok) throw new Error('No se pudieron cargar los tickets.');
+
+                const tickets = await response.json();
+
+                if (tickets.length === 0) {
+                    emptyMsg.classList.remove('hidden');
+                } else {
+                    tickets.forEach(ticket => {
+                        const ticketEl = document.createElement('div');
+                        ticketEl.className = 'ticket-card';
+                        ticketEl.dataset.id = ticket._id;
+                        ticketEl.innerHTML = `
+                            <div class="ticket-header">
+                                <h3>${ticket.subject}</h3>
+                                <span class="ticket-status status-${ticket.status}">${ticket.status}</span>
+                            </div>
+                            <div class="ticket-meta">
+                                <span>De: ${ticket.name} (${ticket.email})</span>
+                                <span>Usuario: ${ticket.username}</span>
+                                <span>Fecha: ${new Date(ticket.createdAt).toLocaleString()}</span>
+                            </div>
+                            <p class="ticket-message">${ticket.message}</p>
+                            ${ticket.status === 'pendiente' ? '<button class="button-primary complete-ticket-btn">Marcar como Completado</button>' : ''}
+                        `;
+                        ticketsList.appendChild(ticketEl);
+                    });
+                }
+            } catch (error) {
+                ticketsList.innerHTML = `<p class="error-text">${error.message}</p>`;
+            } finally {
+                loader.classList.add('hidden');
+            }
+        };
+
+        filter.addEventListener('change', loadTickets);
+        ticketsList.addEventListener('click', async (e) => {
+            if (e.target.classList.contains('complete-ticket-btn')) {
+                const card = e.target.closest('.ticket-card');
+                const ticketId = card.dataset.id;
+                e.target.disabled = true;
+                e.target.textContent = 'Procesando...';
+                try {
+                    const response = await fetch(`/api/admin/tickets/${ticketId}/status`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: 'completado' })
+                    });
+                    if (!response.ok) throw new Error('Error al actualizar el ticket.');
+                    await loadTickets();
+                } catch (error) {
+                    alert(error.message);
+                    e.target.disabled = false;
+                    e.target.textContent = 'Marcar como Completado';
+                }
+            }
+        });
+
+        await loadTickets();
+    }
+
+    if (pathname === '/moderation/reports') {
+        const reportsList = document.getElementById('reports-list-container');
+        const loader = document.getElementById('reports-loader');
+        const emptyMsg = document.getElementById('reports-empty-message');
+        const filterContainer = document.getElementById('report-filters-container');
+        const filter = document.getElementById('report-status-filter');
+        let currentUser = null;
+
+        try {
+            const profileResponse = await fetch('/api/profile');
+            if (!profileResponse.ok) {
+                throw new Error('No autenticado o sin permisos.');
+            }
+            currentUser = await profileResponse.json();
+            if (currentUser.role === 'admin') {
+                filterContainer.classList.remove('hidden');
+            }
+        } catch (e) {
+            reportsList.innerHTML = `<p class="error-text">No tienes permisos para ver esta página.</p>`;
+            loader.classList.add('hidden');
+            return;
+        }
+
+        const loadReports = async () => {
+            loader.classList.remove('hidden');
+            reportsList.innerHTML = '';
+            emptyMsg.classList.add('hidden');
+            try {
+                const status = filter.value;
+                const response = await fetch(`/api/moderation/reports?status=${status}`);
+                if (response.status === 403) {
+                     appRoot.innerHTML = await fetchTemplate('/templates/error-403.html');
+                     return;
+                }
+                if (!response.ok) throw new Error('Error al cargar los reportes.');
+
+                const messages = await response.json();
+                if (messages.length === 0) {
+                    emptyMsg.classList.remove('hidden');
+                } else {
+                    messages.forEach(msg => {
+                        const messageCard = createMessageCard(msg, currentUser);
+                        const reportInfo = document.createElement('div');
+                        reportInfo.className = 'report-info';
+                        reportInfo.innerHTML = `
+                            <p><strong>Reportado por:</strong> ${msg.reportedBy.map(u => `@${u.username}`).join(', ')}</p>
+                            ${msg.reportStatus === 'pendiente' ? '<button class="button-primary review-report-btn">Marcar como Revisado</button>' : '<p><strong>Estado:</strong> Revisado</p>'}
+                        `;
+                        messageCard.appendChild(reportInfo);
+                        reportsList.appendChild(messageCard);
+                    });
+                }
+            } catch (error) {
+                reportsList.innerHTML = `<p class="error-text">${error.message}</p>`;
+            } finally {
+                loader.classList.add('hidden');
+            }
+        };
+
+        filter.addEventListener('change', loadReports);
+        reportsList.addEventListener('click', async (e) => {
+            if (e.target.classList.contains('review-report-btn')) {
+                const card = e.target.closest('.message-card');
+                const messageId = card.dataset.messageId;
+                e.target.disabled = true;
+                try {
+                    const response = await fetch(`/api/moderation/reports/${messageId}/review`, { method: 'PATCH' });
+                    if (!response.ok) throw new Error('Fallo al actualizar el estado del reporte.');
+                    await loadReports();
+                } catch (error) {
+                    alert(error.message);
+                    e.target.disabled = false;
+                }
+            }
+        });
+
+        await loadReports();
     }
     
     if (pathname === '/register-success') {

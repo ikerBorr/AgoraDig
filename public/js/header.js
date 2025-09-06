@@ -1,11 +1,38 @@
 /**
  * @file header.js
- * @description Gestiona la interactividad del menú de navegación,
- * especialmente el comportamiento del menú "sándwich" en vistas móviles.
+ * @description Gestiona la lógica del encabezado, incluyendo la visibilidad de enlaces
+ * de navegación dinámicos basados en el rol del usuario y la interactividad del menú móvil.
  */
 
-document.addEventListener('DOMContentLoaded', () => {
-    // Elementos del DOM para el menú de navegación.
+document.addEventListener('DOMContentLoaded', async () => {
+    // Primero, gestiona la visibilidad de los enlaces dinámicos basados en el rol del usuario.
+    try {
+        const response = await fetch('/api/profile');
+        // Si la respuesta no es OK (ej. 401 No Autorizado), el usuario no está logueado.
+        // No se hace nada y los enlaces de admin/mod permanecerán ocultos.
+        if (response.ok) {
+            const user = await response.json();
+            const ticketsLink = document.getElementById('nav-tickets-link');
+            const reportsLink = document.getElementById('nav-reports-link');
+
+            if (user && user.role) {
+                // Si es admin, muestra ambos enlaces.
+                if (user.role === 'admin') {
+                    if (ticketsLink) ticketsLink.classList.remove('hidden');
+                    if (reportsLink) reportsLink.classList.remove('hidden');
+                } 
+                // Si es moderador, muestra solo el enlace de reportes.
+                else if (user.role === 'moderator') {
+                    if (reportsLink) reportsLink.classList.remove('hidden');
+                }
+            }
+        }
+    } catch (error) {
+        // En caso de un error de red, no se muestran los enlaces para mayor seguridad.
+        console.error('Error al obtener el perfil para actualizar el header:', error);
+    }
+
+    // A continuación, se configura la interactividad del menú móvil.
     const menuToggle = document.getElementById('menu-toggle');
     const mainNav = document.getElementById('main-nav');
 

@@ -1,0 +1,17 @@
+<section id="admin-tickets-panel" class="container">
+    <h1>Panel de Tickets de Contacto</h1>
+    <p>Revisa y gestiona las solicitudes de los usuarios.</p>
+
+    <div class="filters-container">
+        <label for="ticket-status-filter">Filtrar por estado:</label>
+        <select id="ticket-status-filter">
+            <option value="pendiente" selected>Pendientes</option>
+            <option value="completado">Completados</option>
+        </select>
+    </div>
+
+    <div id="tickets-loader" class="loader hidden"></div>
+    <div id="tickets-list" class="tickets-list-container">
+        </div>
+    <p id="tickets-empty-message" class="empty-feed-message hidden">No hay tickets para mostrar con el filtro seleccionado.</p>
+</section>

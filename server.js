@@ -211,6 +211,28 @@ const isModeratorOrAdmin = async (req, res, next) => {
     }
 };
 
+/**
+ * @function isAdmin
+ * @description Middleware de autorización para verificar si un usuario autenticado tiene el rol de 'admin'.
+ * @param {import('express').Request} req - Objeto de la petición de Express.
+ * @param {import('express').Response} res - Objeto de la respuesta de Express.
+ * @param {import('express').NextFunction} next - Función callback para pasar al siguiente middleware.
+ */
+const isAdmin = async (req, res, next) => {
+    try {
+        const user = await User.findById(req.session.userId).select('role');
+        if (user && user.role === 'admin') {
+            next();
+        } else {
+            res.status(403).json({ message: 'Acceso denegado. Se requieren privilegios de administrador.' });
+        }
+    } catch (error) {
+        console.error('Error en middleware isAdmin:', error);
+        res.status(500).json({ message: 'Error del servidor al verificar los permisos.' });
+    }
+};
+
+
 // --- CONFIGURACIÓN DE LIMITADORES DE PETICIONES (RATE LIMITING) ---
 
 /**
@@ -349,7 +371,8 @@ const messageSchema = new mongoose.Schema({
     replies: { type: [mongoose.Schema.Types.ObjectId], ref: 'Message', default: [] },
     messageStatus: { type: String, enum: ['active', 'deleted', 'deletedByModerator', 'deletedByAdmin'], default: 'active', index: true },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
-    reportedBy: { type: [mongoose.Schema.Types.ObjectId], ref: 'User', default: [] }
+    reportedBy: { type: [mongoose.Schema.Types.ObjectId], ref: 'User', default: [] },
+    reportStatus: { type: String, enum: ['pendiente', 'revisado'], default: 'pendiente', index: true }
 }, {
     timestamps: true,
     toJSON: { virtuals: true }, 
@@ -378,6 +401,22 @@ messageSchema.virtual('likeCount').get(function() { return this.likes.length; })
 messageSchema.virtual('replyCount').get(function() { return this.replies.length; });
 
 const Message = messagesDbConnection.model('Message', messageSchema);
+
+
+/**
+ * @description Esquema de Mongoose para los tickets de contacto.
+ * Almacenado en la BD de usuarios.
+ */
+const contactTicketSchema = new mongoose.Schema({
+    name: { type: String, required: true, trim: true },
+    email: { type: String, required: true, trim: true },
+    username: { type: String, trim: true }, // Opcional
+    subject: { type: String, required: true, trim: true, maxlength: 150 },
+    message: { type: String, required: true, trim: true, maxlength: 5000 },
+    status: { type: String, enum: ['pendiente', 'completado'], default: 'pendiente', index: true }
+}, { timestamps: true });
+
+const ContactTicket = usersDbConnection.model('ContactTicket', contactTicketSchema);
 
 
 // =================================================================
@@ -647,6 +686,50 @@ app.post('/logout', actionLimiter, (req, res) => {
 // =================================================================
 //  API ROUTES
 // =================================================================
+
+/**
+ * @route   POST /api/contact
+ * @description Recibe y guarda un nuevo ticket de contacto desde el formulario público.
+ * @access  Public
+ * @param {object} req.body - Datos del formulario de contacto.
+ * @returns {object} 201 - Mensaje de éxito.
+ * @returns {object} 400 - Errores de validación.
+ * @returns {object} 500 - Error del servidor.
+ */
+app.post('/api/contact', actionLimiter, async (req, res) => {
+    try {
+        const { name, email, username, subject, message } = req.body;
+
+        if (!name || !email || !subject || !message) {
+            return res.status(400).json({ message: 'Los campos nombre, email, asunto y mensaje son obligatorios.' });
+        }
+
+        const emailRegex = /\S+@\S+\.\S+/;
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({ message: 'Por favor, introduce un formato de email válido.' });
+        }
+
+        const newTicket = new ContactTicket({
+            name,
+            email,
+            username: username || 'No especificado',
+            subject,
+            message
+        });
+
+        await newTicket.save();
+
+        res.status(201).json({ message: 'Tu mensaje ha sido enviado con éxito. Nos pondremos en contacto contigo pronto.' });
+
+    } catch (error) {
+        if (error.name === 'ValidationError') {
+            return res.status(400).json({ message: 'Los datos proporcionados no son válidos. Revisa las longitudes de los campos.' });
+        }
+        console.error('Error en /api/contact:', error);
+        res.status(500).json({ message: 'Error en el servidor al procesar tu solicitud.' });
+    }
+});
+
 
 /**
  * @route   POST /api/users/reset-password
@@ -1194,7 +1277,7 @@ app.post('/api/messages/:id/like', actionLimiter, isAuthenticated, async (req, r
  * @access  Private (requiere `isAuthenticated` middleware)
  * @param {object} req.params - Parámetros de la ruta.
  * @param {string} req.params.id - El ID del mensaje a reportar.
- * @returns {object} 200 - Mensaje de éxito.
+ * @returns {object} 200 - Mensaje de éxito y el nuevo estado de reporte.
  * @returns {object} 403 - Intento de reportar un mensaje propio.
  * @returns {object} 404 - Mensaje no encontrado.
  * @returns {object} 500 - Error del servidor.
@@ -1209,7 +1292,11 @@ app.post('/api/messages/:id/report', actionLimiter, isAuthenticated, async (req,
         if (message.sender.equals(userId)) return res.status(403).json({ message: 'No puedes reportar tus propios mensajes.' });
 
         await Message.findByIdAndUpdate(messageId, { $addToSet: { reportedBy: userId } });
-        res.status(200).json({ message: 'El mensaje ha sido reportado correctamente.' });
+        
+        res.status(200).json({
+            message: 'El mensaje ha sido reportado correctamente.',
+            isReported: true 
+        });
 
     } catch (error) {
         console.error(`Error en POST /api/messages/${req.params.id}/report:`, error);
@@ -1497,7 +1584,7 @@ function processMessagesForClient(messages, sessionUserId) {
             };
         }
         const isLiked = sessionUserId ? message.likes?.some(like => like.toString() === sessionUserId.toString()) || false : false;
-        const isReported = false;
+        const isReported = sessionUserId ? message.reportedBy?.some(reporterId => reporterId.toString() === sessionUserId.toString()) || false : false;
 
         return { ...message, isLiked, isReported };
     });
@@ -1630,6 +1717,150 @@ app.get('/api/search', apiLimiter, async (req, res) => {
     } catch (error) {
         console.error('Error en GET /api/search:', error);
         res.status(500).json({ message: 'Error en el servidor al realizar la búsqueda.' });
+    }
+});
+
+
+// =================================================================
+//  ADMIN & MODERATION ROUTES
+// =================================================================
+
+/**
+ * @route   GET /api/admin/tickets
+ * @description Obtiene los tickets de contacto. Solo para administradores.
+ * @access  Private (Admin)
+ * @param {string} [req.query.status] - Filtra los tickets por estado ('pendiente' o 'completado').
+ * @returns {object} 200 - Una lista de tickets.
+ * @returns {object} 500 - Error del servidor.
+ */
+app.get('/api/admin/tickets', apiLimiter, isAuthenticated, isAdmin, async (req, res) => {
+    try {
+        const { status } = req.query;
+        const filter = {};
+        if (status && ['pendiente', 'completado'].includes(status)) {
+            filter.status = status;
+        } else {
+            filter.status = 'pendiente';
+        }
+
+        const tickets = await ContactTicket.find(filter).sort({ createdAt: 1 }); // FIFO
+        res.status(200).json(tickets);
+    } catch (error) {
+        console.error('Error en GET /api/admin/tickets:', error);
+        res.status(500).json({ message: 'Error en el servidor al obtener los tickets.' });
+    }
+});
+
+/**
+ * @route   PATCH /api/admin/tickets/:id/status
+ * @description Actualiza el estado de un ticket de contacto. Solo para administradores.
+ * @access  Private (Admin)
+ * @param {string} req.params.id - El ID del ticket a actualizar.
+ * @param {object} req.body - El cuerpo de la petición.
+ * @param {string} req.body.status - El nuevo estado ('completado').
+ * @returns {object} 200 - El ticket actualizado.
+ * @returns {object} 400 - Si el estado no es válido.
+ * @returns {object} 404 - Si el ticket no se encuentra.
+ * @returns {object} 500 - Error del servidor.
+ */
+app.patch('/api/admin/tickets/:id/status', actionLimiter, isAuthenticated, isAdmin, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body;
+
+        if (status !== 'completado') {
+            return res.status(400).json({ message: 'El único estado válido para la actualización es "completado".' });
+        }
+
+        const updatedTicket = await ContactTicket.findByIdAndUpdate(
+            id,
+            { $set: { status: 'completado' } },
+            { new: true }
+        );
+
+        if (!updatedTicket) {
+            return res.status(404).json({ message: 'Ticket no encontrado.' });
+        }
+
+        res.status(200).json(updatedTicket);
+    } catch (error) {
+        console.error(`Error en PATCH /api/admin/tickets/${req.params.id}/status:`, error);
+        res.status(500).json({ message: 'Error en el servidor al actualizar el ticket.' });
+    }
+});
+
+/**
+ * @route   GET /api/moderation/reports
+ * @description Obtiene mensajes reportados. Para moderadores y administradores.
+ * @access  Private (Moderator/Admin)
+ * @param {string} [req.query.status] - Filtra por estado ('pendiente' o 'revisado'). 'revisado' es solo para admins.
+ * @returns {object} 200 - Una lista de mensajes reportados.
+ * @returns {object} 500 - Error del servidor.
+ */
+app.get('/api/moderation/reports', apiLimiter, isAuthenticated, isModeratorOrAdmin, async (req, res) => {
+    try {
+        const { status } = req.query;
+        const requesterRole = req.userRole;
+
+        const filter = {
+            'reportedBy.0': { $exists: true } // El array reportedBy no está vacío
+        };
+
+        if (status === 'revisado' && requesterRole === 'admin') {
+            filter.reportStatus = 'revisado';
+        } else {
+            filter.reportStatus = 'pendiente';
+        }
+
+        const reportedMessages = await Message.find(filter)
+            .sort({ createdAt: 1 }) // FIFO
+            .populate({
+                path: 'sender',
+                model: User,
+                select: 'username'
+            })
+            .populate({
+                path: 'reportedBy',
+                model: User,
+                select: 'username'
+            })
+            .lean();
+
+        res.status(200).json(reportedMessages);
+
+    } catch (error) {
+        console.error('Error en GET /api/moderation/reports:', error);
+        res.status(500).json({ message: 'Error del servidor al obtener los reportes.' });
+    }
+});
+
+/**
+ * @route   PATCH /api/moderation/reports/:id/review
+ * @description Marca un mensaje reportado como revisado.
+ * @access  Private (Moderator/Admin)
+ * @param {string} req.params.id - El ID del mensaje a marcar como revisado.
+ * @returns {object} 200 - Mensaje de éxito.
+ * @returns {object} 404 - Mensaje no encontrado.
+ * @returns {object} 500 - Error del servidor.
+ */
+app.patch('/api/moderation/reports/:id/review', actionLimiter, isAuthenticated, isModeratorOrAdmin, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const updatedMessage = await Message.findByIdAndUpdate(
+            id,
+            { $set: { reportStatus: 'revisado' } },
+            { new: true }
+        );
+
+        if (!updatedMessage) {
+            return res.status(404).json({ message: 'Mensaje reportado no encontrado.' });
+        }
+
+        res.status(200).json({ message: 'El reporte ha sido marcado como revisado.' });
+    } catch (error) {
+        console.error(`Error en PATCH /api/moderation/reports/${req.params.id}/review:`, error);
+        res.status(500).json({ message: 'Error en el servidor al actualizar el estado del reporte.' });
     }
 });
 
