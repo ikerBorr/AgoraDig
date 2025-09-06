@@ -178,7 +178,7 @@ const verifyTurnstile = async (req, res, next) => {
         if (outcome.success) {
             next();
         } else {
-            console.error('Fallo en la verificación de Turnstile, códigos de error:', outcome['error-codes']);
+            console.error('Fallo en la verificación de Turnstile. Razón: API de Cloudflare denegó la validación.');
             return res.status(401).json({ message: 'Fallo en la verificación anti-bot. Inténtalo de nuevo.' });
         }
     } catch (error) {

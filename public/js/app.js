@@ -156,10 +156,17 @@ function createMessageCard(message, currentUser) {
         const replyToInfo = document.createElement('div');
         replyToInfo.className = 'reply-to-info';
         
+        replyToInfo.appendChild(document.createTextNode('Respuesta a: '));
         if (message.referencedMessage.messageStatus === 'active' && message.referencedMessage.title) {
-            replyToInfo.innerHTML = `Respuesta a: <a href="/messages/${message.referencedMessage._id}">${message.referencedMessage.title}</a>`;
+            const link = document.createElement('a');
+            link.href = `/messages/${message.referencedMessage._id}`;
+            link.textContent = message.referencedMessage.title; // Usar textContent es seguro
+            replyToInfo.appendChild(link);
         } else {
-            replyToInfo.innerHTML = `Respuesta a: <span class="deleted-message-reference">Mensaje_Eliminado</span>`;
+            const span = document.createElement('span');
+            span.className = 'deleted-message-reference';
+            span.textContent = 'Mensaje_Eliminado';
+            replyToInfo.appendChild(span);
         }
         cardBody.appendChild(replyToInfo);
     }
@@ -1401,6 +1408,7 @@ async function renderPage(path) {
             let profileHtml = await fetchTemplate('/templates/view-profile.html');
             const joinDate = new Date(userData.createdAt).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
             
+            // Reemplazo de datos seguros (no controlados por el usuario, como la fecha).
             profileHtml = profileHtml.replace(/{{createdAt}}/g, joinDate);
             
             let adminControlsHtml = '';
@@ -1464,11 +1472,15 @@ async function renderPage(path) {
                  `;
             }
 
-            profileHtml = profileHtml
-                .replace('{{moderationInfo}}', moderationInfoHtml)
-                .replace('{{adminControls}}', adminControlsHtml);
-                
+            // Se inserta el HTML estructural en el DOM.
             appRoot.innerHTML = profileHtml;
+
+            const moderationInfoContainer = appRoot.querySelector('#moderation-info-display');
+            if (moderationInfoContainer) moderationInfoContainer.innerHTML = moderationInfoHtml;
+
+            const adminControlsContainer = appRoot.querySelector('#admin-controls-display');
+            if (adminControlsContainer) adminControlsContainer.innerHTML = adminControlsHtml;
+
             document.title = `Perfil de ${userData.username}`;
             
             const profilePic = appRoot.querySelector('.profile-picture');
@@ -1479,6 +1491,7 @@ async function renderPage(path) {
             appRoot.querySelector('.profile-fullname').textContent = `${userData.firstName} ${userData.lastName}`;
             appRoot.querySelector('.profile-username').textContent = `@${userData.username}`;
             appRoot.querySelector('.profile-description').textContent = userData.description || 'Este usuario aún no ha añadido una descripción.';
+
 
             if (viewerRole === 'admin' || viewerRole === 'moderator') {
                 const adminForm = document.getElementById('admin-edit-form');
