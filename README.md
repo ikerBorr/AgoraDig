@@ -20,13 +20,26 @@
 
 ## Instalación y Puesta en Marcha
 
-Para ejecutar este proyecto en tu entorno local, sigue estos pasos:
+Para ejecutar este proyecto en tu entorno local con Docker:
 
-1.  **Clona este repositorio**
+1.	Asegúrate de tener instalados Docker y Docker Compose.
+2.	Desde la carpeta raíz del proyecto, construye e inicia los servicios en segundo plano:
 
-2.  **Navega al directorio del proyecto**
+    ```bash
+    docker compose -d --build
+    ```
+3. Verifica que los contenedores estén corriendo:
+    
+    ```bash
+    docker compose ps
+    ```
+4.	Abre tu navegador y accede a la aplicación en:
+[http://localhost:3000](http://localhost:3000/)
 
-3.  **Sigue las instrucciones del archivo [INSTALL](./INSTALL.md)**
+> 💡Consejo: si quieres ver los logs en vivo del servidor, ejecuta:
+> ```bash
+> docker compose logs -f app
+> ```
 
 
 ## Licencia
