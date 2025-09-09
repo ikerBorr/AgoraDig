@@ -36,7 +36,7 @@ Para ejecutar este proyecto en tu entorno local con Docker:
 4.	Abre tu navegador y accede a la aplicación en:
 [http://localhost:3000](http://localhost:3000/)
 
-> 💡 **Consejo:** si quieres ver los logs en vivo del servidor, ejecuta:
+> 💡Consejo: si quieres ver los logs en vivo del servidor, ejecuta:
 > ```bash
 > docker compose logs -f app
 > ```
