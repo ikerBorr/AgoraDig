@@ -10,22 +10,28 @@
 //  IMPORTS
 // =================================================================
 
-const path = require('path');
-const fs = require('fs');
-const crypto =require('crypto');
+import path from 'path';
+import crypto from 'crypto';
 
-require('dotenv').config();
-const express = require('express');
-const mongoose = require('mongoose');
-const session = require('express-session');
-const MongoStore = require('connect-mongo');
-const bcrypt = require('bcrypt');
-const multer = require('multer');
-const rateLimit = require('express-rate-limit');
-const helmet = require('helmet');
-const axios = require('axios');
-const cloudinary = require('cloudinary').v2;
-const sharp = require('sharp');
+import dotenv from 'dotenv';
+dotenv.config();
+
+import express from 'express';
+import mongoose from 'mongoose';
+import session from 'express-session';
+import MongoStore from 'connect-mongo';
+import bcrypt from 'bcrypt';
+import multer from 'multer';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import axios from 'axios';
+import { v2 as cloudinary } from 'cloudinary';
+import sharp from 'sharp';
+import { fileURLToPath } from 'url';
+
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 
 // =================================================================
@@ -62,7 +68,7 @@ function getProfilePictureUrl(publicId) {
     if (!publicId) {
         return DEFAULT_AVATAR_PATH;
     }
-    
+
     // Se añade `version` con el timestamp actual para invalidar la caché de la CDN.
     // Esto fuerza a Cloudinary a servir la imagen más reciente en lugar de una versión
     // cacheada, que es el problema raíz cuando se sobrescriben imágenes.
@@ -165,7 +171,7 @@ const verifyTurnstile = async (req, res, next) => {
         }
 
         const secretKey = process.env.TURNSTILE_SECRET_KEY;
-        
+
         const formData = new FormData();
         formData.append('secret', secretKey);
         formData.append('response', token);
@@ -348,10 +354,10 @@ const LoginAttempt = usersDbConnection.model('LoginAttempt', loginAttemptSchema)
  * Limita el tamaño a 4MB.
  */
 const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 4 * 1024 * 1024 // 4 Megabytes
-  }
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 4 * 1024 * 1024 // 4 Megabytes
+    }
 });
 
 /**
@@ -375,7 +381,7 @@ const messageSchema = new mongoose.Schema({
     reportStatus: { type: String, enum: ['pendiente', 'revisado'], default: 'pendiente', index: true }
 }, {
     timestamps: true,
-    toJSON: { virtuals: true }, 
+    toJSON: { virtuals: true },
     toObject: { virtuals: true }
 });
 
@@ -452,18 +458,18 @@ app.post('/login', sensitiveRouteLimiter, verifyTurnstile, async (req, res) => {
         }
 
         const identifier = loginIdentifier.toLowerCase();
-        
+
         // 1. Comprobar si la IP/identificador ya está bloqueada.
         const loginAttempt = await LoginAttempt.findOne({ ip, loginIdentifier: identifier });
 
         if (loginAttempt && loginAttempt.lockoutUntil && loginAttempt.lockoutUntil > Date.now()) {
             const timeLeftMs = loginAttempt.lockoutUntil.getTime() - Date.now();
             const hoursLeft = Math.ceil(timeLeftMs / (1000 * 60 * 60));
-            return res.status(403).json({ 
-                message: `Demasiados intentos fallidos desde esta red. Por seguridad, el acceso para '${loginIdentifier}' ha sido bloqueado temporalmente. Inténtelo de nuevo en aproximadamente ${hoursLeft} horas.` 
+            return res.status(403).json({
+                message: `Demasiados intentos fallidos desde esta red. Por seguridad, el acceso para '${loginIdentifier}' ha sido bloqueado temporalmente. Inténtelo de nuevo en aproximadamente ${hoursLeft} horas.`
             });
         }
-        
+
         // 2. Buscar al usuario.
         const user = await User.findOne({
             $or: [{ username: loginIdentifier }, { email: identifier }]
@@ -480,10 +486,10 @@ app.post('/login', sensitiveRouteLimiter, verifyTurnstile, async (req, res) => {
 
         if (!isMatch) {
             const currentAttempts = (loginAttempt ? loginAttempt.attempts : 0) + 1;
-            
+
             let update = { $inc: { attempts: 1 } };
             let message = '';
-            
+
             if (currentAttempts >= MAX_LOGIN_ATTEMPTS) {
                 update.lockoutUntil = new Date(Date.now() + LOCKOUT_TIME);
                 message = 'Contraseña incorrecta. Se ha alcanzado el número máximo de intentos. El acceso ha sido bloqueado por 24 horas por seguridad.';
@@ -497,7 +503,7 @@ app.post('/login', sensitiveRouteLimiter, verifyTurnstile, async (req, res) => {
 
             return res.status(401).json({ errors: { password: message } });
         }
-        
+
         // 3. Comprobar si la cuenta del usuario tiene alguna restricción.
         if (user.userStatus === 'deleted') {
             return res.status(403).json({ message: 'Esta cuenta ha sido eliminada y ya no se puede acceder a ella.' });
@@ -505,7 +511,7 @@ app.post('/login', sensitiveRouteLimiter, verifyTurnstile, async (req, res) => {
         if (user.userStatus === 'banned') {
             return res.status(403).json({ message: 'Esta cuenta ha sido suspendida. Contacta con soporte para más información.' });
         }
-        
+
         // 4. Si el login es exitoso, limpiar el registro de intentos y crear la sesión.
         await LoginAttempt.deleteOne({ ip, loginIdentifier: identifier });
 
@@ -546,123 +552,123 @@ app.post('/register',
     },
     verifyTurnstile,
     async (req, res) => {
-    try {
-        const {
-            firstName, lastName, dateOfBirth,
-            username, email, confirmEmail, password, confirmPassword,
-            description, acceptsPublicity
-        } = req.body;
+        try {
+            const {
+                firstName, lastName, dateOfBirth,
+                username, email, confirmEmail, password, confirmPassword,
+                description, acceptsPublicity
+            } = req.body;
 
-        // --- Validación de Datos ---
-        if (!firstName || !lastName || !username || !email || !password || !confirmPassword || !dateOfBirth) {
-            return res.status(400).json({ errors: { general: 'Faltan campos por rellenar.' } });
-        }
+            // --- Validación de Datos ---
+            if (!firstName || !lastName || !username || !email || !password || !confirmPassword || !dateOfBirth) {
+                return res.status(400).json({ errors: { general: 'Faltan campos por rellenar.' } });
+            }
 
-        const nameRegex = /^[\p{L}\s]+$/u;
-        if (!nameRegex.test(firstName)) return res.status(400).json({ errors: { firstName: 'El nombre solo puede contener letras y espacios.' } });
-        if (!nameRegex.test(lastName)) return res.status(400).json({ errors: { lastName: 'Los apellidos solo pueden contener letras y espacios.' } });
-        if (username.length < 3 || username.length > 20) return res.status(400).json({ errors: { username: 'El nombre de usuario debe tener entre 3 y 20 caracteres.' } });
-        const emailRegex = /\S+@\S+\.\S+/;
-        if (!emailRegex.test(email)) return res.status(400).json({ errors: { email: 'Por favor, introduce un formato de email válido.' } });
-        if (email !== confirmEmail) return res.status(400).json({ errors: { confirmEmail: 'Los emails no coinciden.' } });
-        if (password.length < 6) return res.status(400).json({ errors: { password: 'La contraseña debe tener al menos 6 caracteres.' } });
-        if (password !== confirmPassword) return res.status(400).json({ errors: { confirmPassword: 'Las contraseñas no coinciden.' } });
-        const birthDate = new Date(dateOfBirth);
-        const minDate = new Date(); minDate.setHours(0,0,0,0); minDate.setFullYear(minDate.getFullYear() - 110);
-        const maxDate = new Date(); maxDate.setHours(0,0,0,0); maxDate.setFullYear(maxDate.getFullYear() - 16);
-        if (isNaN(birthDate.getTime()) || birthDate > maxDate || birthDate < minDate) return res.status(400).json({ errors: { dateOfBirth: 'La fecha de nacimiento proporcionada no es válida o eres demasiado joven para registrarte.' }});
-        
-        // Hashing de la contraseña y el PIN de recuperación.
-        const salt = await bcrypt.genSalt(12);
-        const hashedPassword = await bcrypt.hash(password, salt);
-        const plainTextRecoveryPIN = crypto.randomBytes(8).toString('hex').toUpperCase();
-        const hashedRecoveryPIN = await bcrypt.hash(plainTextRecoveryPIN, salt);
+            const nameRegex = /^[\p{L}\s]+$/u;
+            if (!nameRegex.test(firstName)) return res.status(400).json({ errors: { firstName: 'El nombre solo puede contener letras y espacios.' } });
+            if (!nameRegex.test(lastName)) return res.status(400).json({ errors: { lastName: 'Los apellidos solo pueden contener letras y espacios.' } });
+            if (username.length < 3 || username.length > 20) return res.status(400).json({ errors: { username: 'El nombre de usuario debe tener entre 3 y 20 caracteres.' } });
+            const emailRegex = /\S+@\S+\.\S+/;
+            if (!emailRegex.test(email)) return res.status(400).json({ errors: { email: 'Por favor, introduce un formato de email válido.' } });
+            if (email !== confirmEmail) return res.status(400).json({ errors: { confirmEmail: 'Los emails no coinciden.' } });
+            if (password.length < 6) return res.status(400).json({ errors: { password: 'La contraseña debe tener al menos 6 caracteres.' } });
+            if (password !== confirmPassword) return res.status(400).json({ errors: { confirmPassword: 'Las contraseñas no coinciden.' } });
+            const birthDate = new Date(dateOfBirth);
+            const minDate = new Date(); minDate.setHours(0,0,0,0); minDate.setFullYear(minDate.getFullYear() - 110);
+            const maxDate = new Date(); maxDate.setHours(0,0,0,0); maxDate.setFullYear(maxDate.getFullYear() - 16);
+            if (isNaN(birthDate.getTime()) || birthDate > maxDate || birthDate < minDate) return res.status(400).json({ errors: { dateOfBirth: 'La fecha de nacimiento proporcionada no es válida o eres demasiado joven para registrarte.' }});
 
-        const newUser = new User({
-            firstName, lastName, dateOfBirth,
-            username, email, password: hashedPassword, recoveryPIN: hashedRecoveryPIN,
-            description, acceptsPublicity: !!acceptsPublicity,
-        });
-        await newUser.save();
+            // Hashing de la contraseña y el PIN de recuperación.
+            const salt = await bcrypt.genSalt(12);
+            const hashedPassword = await bcrypt.hash(password, salt);
+            const plainTextRecoveryPIN = crypto.randomBytes(8).toString('hex').toUpperCase();
+            const hashedRecoveryPIN = await bcrypt.hash(plainTextRecoveryPIN, salt);
 
-        // Asignación de imagen de perfil: subida por el usuario o una aleatoria por defecto.
-        if (req.file) {
-            // Si el usuario sube una imagen, se procesa y se sube a Cloudinary.
-            const processedImageBuffer = await sharp(req.file.buffer)
-                .resize(400, 400, { fit: 'fill' })
-                .webp({ quality: 80 })
-                .toBuffer();
+            const newUser = new User({
+                firstName, lastName, dateOfBirth,
+                username, email, password: hashedPassword, recoveryPIN: hashedRecoveryPIN,
+                description, acceptsPublicity: !!acceptsPublicity,
+            });
+            await newUser.save();
 
-            const uploadPromise = new Promise((resolve, reject) => {
-                const uploadStream = cloudinary.uploader.upload_stream(
-                    {
+            // Asignación de imagen de perfil: subida por el usuario o una aleatoria por defecto.
+            if (req.file) {
+                // Si el usuario sube una imagen, se procesa y se sube a Cloudinary.
+                const processedImageBuffer = await sharp(req.file.buffer)
+                    .resize(400, 400, { fit: 'fill' })
+                    .webp({ quality: 80 })
+                    .toBuffer();
+
+                const uploadPromise = new Promise((resolve, reject) => {
+                    const uploadStream = cloudinary.uploader.upload_stream(
+                        {
+                            public_id: newUser._id.toString(),
+                            type: "private",
+                            overwrite: true,
+                            resource_type: 'image'
+                        },
+                        (error, result) => {
+                            if (error) reject(error);
+                            else resolve(result);
+                        }
+                    );
+                    uploadStream.end(processedImageBuffer);
+                });
+
+                const uploadResult = await uploadPromise;
+                newUser.profilePicturePublicId = uploadResult.public_id;
+                await newUser.save();
+            } else {
+                // Si el usuario no sube una imagen, se le asigna una de las 10 predefinidas de forma aleatoria.
+                const NUM_DEFAULT_AVATARS = 10;
+                const randomIndex = Math.floor(Math.random() * NUM_DEFAULT_AVATARS) + 1;
+                const defaultAvatarPath = path.join(__dirname, 'public', 'images', 'user_img', `user${randomIndex}.webp`);
+
+                try {
+                    // Se sube una copia del avatar por defecto a Cloudinary con el ID del nuevo usuario como public_id.
+                    const uploadResult = await cloudinary.uploader.upload(defaultAvatarPath, {
                         public_id: newUser._id.toString(),
                         type: "private",
                         overwrite: true,
                         resource_type: 'image'
-                    },
-                    (error, result) => {
-                        if (error) reject(error);
-                        else resolve(result);
-                    }
-                );
-                uploadStream.end(processedImageBuffer);
+                    });
+
+                    // Se guarda la referencia (el public_id) en el documento del usuario.
+                    newUser.profilePicturePublicId = uploadResult.public_id;
+                    await newUser.save();
+                } catch (uploadError) {
+                    // Si la subida del avatar por defecto falla, no se bloquea el registro.
+                    // Se registrará el error en el servidor para su futura revisión.
+                    console.error(`Error al subir el avatar por defecto para el usuario ${newUser._id}:`, uploadError);
+                }
+            }
+
+            res.status(201).json({
+                message: '¡Usuario registrado con éxito! Se ha generado un PIN de recuperación único. Anótelo en un lugar seguro para poder recuperar su cuenta en caso de pérdida.',
+                userId: newUser._id,
+                recoveryPIN: plainTextRecoveryPIN
             });
 
-            const uploadResult = await uploadPromise;
-            newUser.profilePicturePublicId = uploadResult.public_id;
-            await newUser.save();
-        } else {
-            // Si el usuario no sube una imagen, se le asigna una de las 10 predefinidas de forma aleatoria.
-            const NUM_DEFAULT_AVATARS = 10;
-            const randomIndex = Math.floor(Math.random() * NUM_DEFAULT_AVATARS) + 1;
-            const defaultAvatarPath = path.join(__dirname, 'public', 'images', 'user_img', `user${randomIndex}.webp`);
-
-            try {
-                // Se sube una copia del avatar por defecto a Cloudinary con el ID del nuevo usuario como public_id.
-                const uploadResult = await cloudinary.uploader.upload(defaultAvatarPath, {
-                    public_id: newUser._id.toString(),
-                    type: "private",
-                    overwrite: true,
-                    resource_type: 'image'
-                });
-
-                // Se guarda la referencia (el public_id) en el documento del usuario.
-                newUser.profilePicturePublicId = uploadResult.public_id;
-                await newUser.save();
-            } catch (uploadError) {
-                // Si la subida del avatar por defecto falla, no se bloquea el registro.
-                // Se registrará el error en el servidor para su futura revisión.
-                console.error(`Error al subir el avatar por defecto para el usuario ${newUser._id}:`, uploadError);
+        } catch (error) {
+            if (error.name === 'ValidationError') {
+                const errors = {};
+                for (let field in error.errors) {
+                    errors[field] = error.errors[field].message;
+                }
+                return res.status(400).json({ errors });
             }
-        }
 
-        res.status(201).json({
-            message: '¡Usuario registrado con éxito! Se ha generado un PIN de recuperación único. Anótelo en un lugar seguro para poder recuperar su cuenta en caso de pérdida.',
-            userId: newUser._id,
-            recoveryPIN: plainTextRecoveryPIN
-        });
-
-    } catch (error) {
-        if (error.name === 'ValidationError') {
-            const errors = {};
-            for (let field in error.errors) {
-                errors[field] = error.errors[field].message;
+            if (error.code === 11000) {
+                if (error.keyPattern.username || error.keyPattern.email) {
+                    return res.status(409).json({ errors: { general: 'El nombre de usuario o el email ya están en uso. Por favor, elige otros diferentes.' }});
+                }
+                if (error.keyPattern.recoveryPIN) return res.status(500).json({ message: 'Error al generar datos únicos. Inténtalo de nuevo.' });
             }
-            return res.status(400).json({ errors });
-        }
-        
-        if (error.code === 11000) {
-            if (error.keyPattern.username || error.keyPattern.email) {
-                 return res.status(409).json({ errors: { general: 'El nombre de usuario o el email ya están en uso. Por favor, elige otros diferentes.' }});
-            }
-            if (error.keyPattern.recoveryPIN) return res.status(500).json({ message: 'Error al generar datos únicos. Inténtalo de nuevo.' });
-        }
 
-        console.error('Error en /register:', error);
-        res.status(500).json({ message: 'Error en el servidor.' });
-    }
-});
+            console.error('Error en /register:', error);
+            res.status(500).json({ message: 'Error en el servidor.' });
+        }
+    });
 
 /**
  * @route   POST /logout
@@ -774,7 +780,7 @@ app.post('/api/users/reset-password', sensitiveRouteLimiter, async (req, res) =>
         if (!isPinMatch) {
             return res.status(401).json({ message: genericError });
         }
-        
+
         // --- Actualización de la Contraseña ---
         const isSamePassword = await bcrypt.compare(newPassword, user.password);
         if (isSamePassword) {
@@ -908,7 +914,7 @@ app.patch('/api/profile',
                 { $set: updateData },
                 { new: true, runValidators: true }
             ).select('firstName lastName username email description profilePicturePublicId role createdAt').lean();
-            
+
             updatedUser.profilePicturePath = getProfilePictureUrl(updatedUser.profilePicturePublicId);
 
             res.status(200).json({
@@ -933,7 +939,7 @@ app.patch('/api/profile',
 /**
  * @route   DELETE /api/profile
  * @description Realiza un "soft delete" del usuario. Esto cambia su estado a 'deleted',
- * anonimiza sus datos, elimina su imagen de Cloudinary, y sus likes/reportes. 
+ * anonimiza sus datos, elimina su imagen de Cloudinary, y sus likes/reportes.
  * Requiere el PIN de recuperación como medida de seguridad.
  * @access  Private (requiere `isAuthenticated` middleware)
  * @param {object} req.body - Cuerpo de la petición.
@@ -967,7 +973,7 @@ app.delete('/api/profile', actionLimiter, isAuthenticated, async (req, res) => {
         if (existingDeletedUser) {
             return res.status(409).json({ message: 'Fallo al eliminar cuenta. Has eliminado otra cuenta hace poco' });
         }
-        
+
         await Message.updateMany({ likes: userId }, { $pull: { likes: userId } });
         await Message.updateMany({ reportedBy: userId }, { $pull: { reportedBy: userId } });
 
@@ -1146,7 +1152,7 @@ app.post('/api/messages/:id/reply', actionLimiter, isAuthenticated, async (req, 
             User.findById(req.session.userId).select('userStatus'),
             Message.findById(parentMessageId)
         ]);
-        
+
         if (!user) return res.status(404).json({ message: 'Usuario no encontrado.' });
         if (user.userStatus === 'banned') return res.status(403).json({ message: 'Tu cuenta ha sido suspendida. No puedes responder a mensajes.' });
         if (!parentMessage) return res.status(404).json({ message: 'El mensaje al que intentas responder no existe.' });
@@ -1157,7 +1163,7 @@ app.post('/api/messages/:id/reply', actionLimiter, isAuthenticated, async (req, 
         if (content.trim().length > 1500 || content.trim().length < 10) return res.status(400).json({ message: 'El contenido debe tener entre 10 y 1500 caracteres.' });
 
         const parsedHashtags = hashtags ? hashtags.match(/#(\w+)/g)?.map(h => h.substring(1)) || [] : [];
-        
+
         const newReply = new Message({
             title, content,
             hashtags: parsedHashtags,
@@ -1165,7 +1171,7 @@ app.post('/api/messages/:id/reply', actionLimiter, isAuthenticated, async (req, 
             referencedMessage: parentMessageId
         });
         await newReply.save();
-        
+
         await Message.updateOne({ _id: parentMessageId }, { $push: { replies: newReply._id } });
 
         const populatedReply = await newReply.populate({
@@ -1175,7 +1181,7 @@ app.post('/api/messages/:id/reply', actionLimiter, isAuthenticated, async (req, 
         });
         const responseMessage = populatedReply.toObject();
         responseMessage.sender.profilePicturePath = getProfilePictureUrl(responseMessage.sender.profilePicturePublicId);
-        
+
         res.status(201).json(responseMessage);
 
     } catch (error) {
@@ -1216,13 +1222,13 @@ app.delete('/api/messages/:id', actionLimiter, isAuthenticated, async (req, res)
         if (!isAuthor && !isModeratorOrAdmin) {
             return res.status(403).json({ message: 'No tienes permiso para eliminar este mensaje.' });
         }
-        
+
         if (message.messageStatus !== 'active') {
-             return res.status(200).json({ message: 'El mensaje ya ha sido eliminado.' });
+            return res.status(200).json({ message: 'El mensaje ya ha sido eliminado.' });
         }
 
         let updateData;
-        if (isAuthor) updateData = { messageStatus: 'deleted' }; 
+        if (isAuthor) updateData = { messageStatus: 'deleted' };
         else if (requester.role === 'moderator') updateData = { messageStatus: 'deletedByModerator', deletedBy: userId };
         else if (requester.role === 'admin') updateData = { messageStatus: 'deletedByAdmin', deletedBy: userId };
 
@@ -1253,10 +1259,10 @@ app.post('/api/messages/:id/like', actionLimiter, isAuthenticated, async (req, r
 
         const message = await Message.findById(messageId);
         if (!message) return res.status(404).json({ message: 'Mensaje no encontrado.' });
-        
+
         const hasLiked = message.likes.some(like => like.equals(userId));
         const update = hasLiked ? { $pull: { likes: userId } } : { $addToSet: { likes: userId } };
-        
+
         const updatedMessage = await Message.findByIdAndUpdate(messageId, update, { new: true });
 
         res.status(200).json({
@@ -1292,10 +1298,10 @@ app.post('/api/messages/:id/report', actionLimiter, isAuthenticated, async (req,
         if (message.sender.equals(userId)) return res.status(403).json({ message: 'No puedes reportar tus propios mensajes.' });
 
         await Message.findByIdAndUpdate(messageId, { $addToSet: { reportedBy: userId } });
-        
+
         res.status(200).json({
             message: 'El mensaje ha sido reportado correctamente.',
-            isReported: true 
+            isReported: true
         });
 
     } catch (error) {
@@ -1353,7 +1359,7 @@ app.get('/api/messages/:id', apiLimiter, async (req, res) => {
         if (!mongoose.Types.ObjectId.isValid(messageId)) {
             return res.status(404).json({ message: 'El formato del ID del mensaje no es válido.' });
         }
-        
+
         const message = await Message.findOne({ _id: messageId, messageStatus: 'active' })
             .populate({
                 path: 'sender',
@@ -1372,7 +1378,7 @@ app.get('/api/messages/:id', apiLimiter, async (req, res) => {
         }
         message.isLiked = req.session.userId ? message.likes?.some(like => like.toString() === req.session.userId.toString()) || false : false;
         message.isReported = req.session.userId ? message.reportedBy?.some(reporterId => reporterId.toString() === req.session.userId.toString()) || false : false;
-        
+
         res.status(200).json(message);
 
     } catch (error) {
@@ -1410,13 +1416,13 @@ app.get('/api/messages/:id/replies', apiLimiter, async (req, res) => {
 
         if (totalReplies > 0 && page <= totalPages) {
             const replyIdsOnPage = parentMessage.replies.slice(skip, skip + limit);
-            
+
             const replies = await Message.find({ '_id': { $in: replyIdsOnPage }, 'messageStatus': 'active' })
                 .populate({ path: 'sender', model: User, select: 'username profilePicturePublicId' })
                 .populate('referencedMessage', 'title _id messageStatus')
                 .sort({ createdAt: 'asc' })
                 .lean({ virtuals: true });
-            
+
             docs = replies.map(reply => {
                 if (reply.sender) {
                     reply.sender.profilePicturePath = getProfilePictureUrl(reply.sender.profilePicturePublicId);
@@ -1428,7 +1434,7 @@ app.get('/api/messages/:id/replies', apiLimiter, async (req, res) => {
                 return reply;
             });
         }
-        
+
         res.status(200).json({ docs, totalPages, currentPage: page });
 
     } catch (error) {
@@ -1467,7 +1473,7 @@ app.get('/api/users/username/:username', apiLimiter, async (req, res) => {
         if (requesterIsModeratorOrAdmin) {
             fieldsToSelect += ' strikes';
         }
-        
+
         const user = await User.findOne({ username: username }).select(fieldsToSelect).lean();
 
         if (!user) return res.status(404).json({ message: 'Usuario no encontrado.' });
@@ -1506,7 +1512,7 @@ app.patch('/api/users/:username/admin-update', actionLimiter, isAuthenticated, i
 
         const userToUpdate = await User.findOne({ username: username });
         if (!userToUpdate) return res.status(404).json({ message: 'Usuario a actualizar no encontrado.' });
-        
+
         if (userToUpdate._id.toString() === req.session.userId) return res.status(403).json({ message: 'No puedes realizar acciones de moderación sobre tu propia cuenta.' });
         if (requesterRole === 'admin' && userToUpdate.role === 'admin') return res.status(403).json({ message: 'Un administrador no puede modificar a otro administrador.' });
         if (requesterRole === 'moderator' && (userToUpdate.role === 'admin' || userToUpdate.role === 'moderator')) return res.status(403).json({ message: 'Los moderadores no tienen permisos para modificar a otros moderadores o administradores.' });
@@ -1517,7 +1523,7 @@ app.patch('/api/users/:username/admin-update', actionLimiter, isAuthenticated, i
             if (isNaN(strikesAsNumber) || strikesAsNumber < 0) return res.status(400).json({ message: 'Los strikes deben ser un número no negativo.' });
             updateData.strikes = strikesAsNumber;
         }
-        
+
         if (requesterRole === 'admin') {
             if (role) {
                 const validRoles = ['user', 'moderator', 'admin'];
@@ -1530,12 +1536,12 @@ app.patch('/api/users/:username/admin-update', actionLimiter, isAuthenticated, i
                 updateData.userStatus = userStatus;
             }
         }
-        
+
         if (Object.keys(updateData).length === 0) return res.status(400).json({ message: 'No se proporcionaron datos válidos para actualizar.' });
 
         const updatedUser = await User.findOneAndUpdate({ username: username }, { $set: updateData }, { new: true })
             .select('firstName lastName username description profilePicturePublicId createdAt role strikes userStatus');
-        
+
         res.status(200).json({ message: 'Usuario actualizado correctamente.', user: updatedUser });
 
     } catch (error) {
@@ -1614,11 +1620,11 @@ app.get('/api/search', apiLimiter, async (req, res) => {
         if (q.startsWith('@')) {
             const usernameQuery = q.substring(1);
             const sanitizedUsername = usernameQuery.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-            
+
             // La búsqueda de perfiles de usuario solo se realiza en la primera página de resultados.
             let processedUsers = [];
             if (page === 1) {
-                const users = await User.find({ 
+                const users = await User.find({
                     username: { $regex: sanitizedUsername, $options: 'i' },
                     userStatus: { $in: ['active', 'verified'] }
                 }).select('username firstName lastName profilePicturePublicId').limit(5).lean();
@@ -1628,11 +1634,11 @@ app.get('/api/search', apiLimiter, async (req, res) => {
                     return user;
                 });
             }
-            
+
             const exactUser = await User.findOne({ username: { $regex: `^${sanitizedUsername}$`, $options: 'i' }});
             let messages = [];
             let totalMessages = 0;
-            
+
             if (exactUser) {
                 messages = await Message.find({ sender: exactUser._id, messageStatus: 'active' })
                     .sort({ createdAt: -1 }).skip(skip).limit(limit)
@@ -1668,7 +1674,7 @@ app.get('/api/search', apiLimiter, async (req, res) => {
             oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
             matchStage.createdAt = { $gte: oneMonthAgo };
         }
-        
+
         switch (sort) {
             case 'likes_desc': sortStage = { likeCount: -1, createdAt: -1 }; break;
             case 'likes_asc': sortStage = { likeCount: 1, createdAt: -1 }; break;
@@ -1683,7 +1689,7 @@ app.get('/api/search', apiLimiter, async (req, res) => {
         const countPipeline = [{ $match: matchStage }, { $count: 'total' }];
         const totalCountResult = await Message.aggregate(countPipeline);
         const totalMessages = totalCountResult.length > 0 ? totalCountResult[0].total : 0;
-        
+
         let idAggregation = [
             { $match: matchStage },
             { $addFields: { likeCount: { $size: "$likes" } } }
@@ -1692,10 +1698,10 @@ app.get('/api/search', apiLimiter, async (req, res) => {
             idAggregation.push({ $addFields: { trendScore: { $add: ["$likeCount", { $size: "$replies" }] } } });
         }
         idAggregation.push({ $sort: sortStage }, { $skip: skip }, { $limit: limit }, { $project: { _id: 1 } });
-        
+
         const sortedMessageDocs = await Message.aggregate(idAggregation);
         const messageIds = sortedMessageDocs.map(doc => doc._id);
-        
+
         if (messageIds.length === 0) {
             return res.status(200).json({ messages: [], totalPages: 0, currentPage: page });
         }
@@ -1704,7 +1710,7 @@ app.get('/api/search', apiLimiter, async (req, res) => {
             .populate({ path: 'sender', model: User, select: 'username profilePicturePublicId' })
             .populate('referencedMessage', 'title _id messageStatus')
             .lean({ virtuals: true });
-            
+
         const sortedMessages = messageIds.map(id => messages.find(msg => msg._id.toString() === id.toString())).filter(Boolean);
 
         res.status(200).json({
