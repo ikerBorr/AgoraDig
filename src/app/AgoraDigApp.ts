@@ -103,7 +103,7 @@ export default class AgoraDigApp {
         });
     }
 
-    registerProcessHandlers() {
+    private registerProcessHandlers() {
         const shutdownAndExit = async (reason: string, code = 0) => {
             try {
                 await this.stop(reason);
@@ -124,7 +124,7 @@ export default class AgoraDigApp {
         });
     }
 
-    setSecurity(options: ServerOptions) {
+    private setSecurity(options: ServerOptions) {
         this.app.use(
             helmet({
                 crossOriginEmbedderPolicy: false,
@@ -134,7 +134,7 @@ export default class AgoraDigApp {
         this.app.disable('x-powered-by');
     }
 
-    setParsers(options: ServerOptions) {
+    private setParsers(options: ServerOptions) {
         const jsonLimit = options.jsonLimit ?? '1mb';
         this.app.use(express.json({ limit: jsonLimit }));
         this.app.use(express.urlencoded({ extended: false }));
@@ -148,7 +148,7 @@ export default class AgoraDigApp {
         this.app.use(errorHandler);
     }
 
-    setRateLimit(options: ServerOptions) {
+    private setRateLimit(options: ServerOptions) {
         const rl = {
             windowMs: 60_000,
             max: 100,
@@ -159,7 +159,7 @@ export default class AgoraDigApp {
         this.app.use(rateLimit(rl));
     }
 
-    setHealthEndpoints(options: ServerOptions) {
+    private setHealthEndpoints(options: ServerOptions) {
         const enabled = options.health?.enabled ?? true;
         if (!enabled) return;
 
@@ -174,7 +174,7 @@ export default class AgoraDigApp {
         });
     }
 
-    setRouters(routers: BuildRouter[]) {
+    private setRouters(routers: BuildRouter[]) {
         if (!Array.isArray(routers)) return;
         routers.forEach(({ basePath, router }) => {
             if (!basePath || !router) return;
@@ -183,7 +183,7 @@ export default class AgoraDigApp {
         });
     }
 
-    setErrorHandler() {
+    private setErrorHandler() {
         const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
             const status =
                 err.statusCode ||
