@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+
+    "rootDir": "src",
+    "outDir": "dist",
+
+    "allowJs": true,
+    "checkJs": true,
+
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+
+    "baseUrl": ".",
+    "paths": { "*": ["./*"] },
+
+    "moduleDetection": "force",
+    "verbatimModuleSyntax": true,
+
+    "declaration": true,
+    "sourceMap": true
+  },
+  "include": ["src"]
+}
