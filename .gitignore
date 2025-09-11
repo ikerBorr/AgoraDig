@@ -4,9 +4,6 @@ node_modules/
 # Archivos de entorno
 .env
 
-# Carpeta de subidas
-uploads/
-
 # Archivos de registro (Logs)
 *.log
 npm-debug.log*

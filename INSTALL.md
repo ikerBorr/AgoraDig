@@ -21,20 +21,21 @@ El servidor requiere un archivo de configuración para gestionar claves secretas
 
 1.  **Crea el archivo `.env`**: En el directorio raíz del proyecto, crea un nuevo archivo llamado `.env`.
 
-2.  **Genera un Secreto de Sesión**: El `SESSION_SECRET` es una clave única y segura para proteger las sesiones de los usuarios. Para generar una clave robusta, ejecuta el siguiente comando en tu terminal y copia el resultado:
-    ```bash
-    node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-    ```
-
-3.  **Añade las variables al archivo `.env`**: Abre el archivo `.env` y añade el `SESSION_SECRET` generado. 
+2.  **Añade las variables al archivo `.env`**: Abre el archivo `.env` y añade las variables necesarias. 
 
     ```env
     # .env
 
-    # Clave secreta para firmar las cookies de sesión.
-    # Pega aquí el valor generado en el paso anterior.
-    SESSION_SECRET=
+    SESSION_SECRET=""
 
+    MONGODB_URI_USERS=""
+    MONGODB_URI_MESSAGES=""
+
+    TURNSTILE_SECRET_KEY=""
+
+    CLOUDINARY_CLOUD_NAME=""
+    CLOUDINARY_API_KEY=""
+    CLOUDINARY_API_SECRET=""
     ```
     **Importante**: Asegúrate de que el archivo `.env` esté incluido en tu `.gitignore` para no subirlo a ningún repositorio.
 

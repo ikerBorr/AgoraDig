@@ -9,7 +9,11 @@
     "dev": "nodemon src/app/main.js"
   },
   "keywords": [],
-  "author": "",
+  "author": {
+    "name": "CPV05",
+    "email": "agoradig.project@gmail.com",
+    "url": "https://agoradig.onrender.com/"
+  },
   "license": "ISC",
   "description": "Aplicación AgoraDig con parches de seguridad.",
   "dependencies": {
