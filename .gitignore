@@ -3,6 +3,7 @@ node_modules/
 
 dist/
 server.js
+verifyPIN.js
 
 # Archivos de entorno
 .env
