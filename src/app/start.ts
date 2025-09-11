@@ -1,5 +1,5 @@
 import AgoraDigApp from "./AgoraDigApp.js";
-import {buildRouters} from "./routes/index.js";
+import {buildRouters} from "./routers/index.js";
 
 
 const PORT = Number(process.env.PORT) || 3000;

@@ -2,7 +2,7 @@ import http from 'node:http';
 import express, {type Express, type ErrorRequestHandler} from 'express';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import type {BuildRouter} from "./routes/index.ts";
+import type {BuildRouter} from "./routers/index.js";
 
 type ServerOptions = {
     jsonLimit?: string;
