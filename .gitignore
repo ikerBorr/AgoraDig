@@ -1,6 +1,8 @@
 # Dependencias de Node.js
 node_modules/
 
+dist/
+
 # Archivos de entorno
 .env
 
